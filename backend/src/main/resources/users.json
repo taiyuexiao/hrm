@@ -1,0 +1,209 @@
+[
+  {
+    "id": 1,
+    "username": "306852",
+    "password": "$2b$12$iPKMD69pnUL.AzBwipzUruSOuwj6fEcfbVeMBL2wkbFrWrcZzPASO",
+    "name": "于浩瀚",
+    "role": "admin",
+    "dept": "总经理室",
+    "status": 1
+  },
+  {
+    "id": 2,
+    "username": "314043",
+    "password": "$2b$12$iPKMD69pnUL.AzBwipzUruSOuwj6fEcfbVeMBL2wkbFrWrcZzPASO",
+    "name": "宋晓迪",
+    "role": "admin",
+    "dept": "总经理室",
+    "status": 1
+  },
+  {
+    "id": 3,
+    "username": "301953",
+    "password": "$2b$12$iPKMD69pnUL.AzBwipzUruSOuwj6fEcfbVeMBL2wkbFrWrcZzPASO",
+    "name": "徐启鹏",
+    "role": "admin",
+    "dept": "总经理室",
+    "status": 1
+  },
+  {
+    "id": 4,
+    "username": "306776",
+    "password": "$2b$12$iPKMD69pnUL.AzBwipzUruSOuwj6fEcfbVeMBL2wkbFrWrcZzPASO",
+    "name": "卢易",
+    "role": "admin",
+    "dept": "总经理室",
+    "status": 1
+  },
+  {
+    "id": 5,
+    "username": "303439",
+    "password": "$2b$12$iPKMD69pnUL.AzBwipzUruSOuwj6fEcfbVeMBL2wkbFrWrcZzPASO",
+    "name": "管理员",
+    "role": "admin",
+    "dept": "系统管理员",
+    "status": 1
+  },
+  {
+    "id": 6,
+    "username": "33528",
+    "password": "$2b$12$iPKMD69pnUL.AzBwipzUruSOuwj6fEcfbVeMBL2wkbFrWrcZzPASO",
+    "name": "管理员",
+    "role": "admin",
+    "dept": "系统管理员",
+    "status": 1
+  },
+  {
+    "id": 7,
+    "username": "xmgl",
+    "password": "$2b$12$QYaV16L1yCF1ss9i4Qqs7Ocw/MRNM.UN4TRUw4fJXv7ENGFQacX.i",
+    "name": "项目管理",
+    "role": "user",
+    "dept": "项目管理",
+    "status": 1
+  },
+  {
+    "id": 8,
+    "username": "xqgl",
+    "password": "$2b$12$QYaV16L1yCF1ss9i4Qqs7Ocw/MRNM.UN4TRUw4fJXv7ENGFQacX.i",
+    "name": "需求管理",
+    "role": "user",
+    "dept": "需求管理",
+    "status": 1
+  },
+  {
+    "id": 9,
+    "username": "jggl",
+    "password": "$2b$12$QYaV16L1yCF1ss9i4Qqs7Ocw/MRNM.UN4TRUw4fJXv7ENGFQacX.i",
+    "name": "架构管理",
+    "role": "user",
+    "dept": "架构管理",
+    "status": 1
+  },
+  {
+    "id": 10,
+    "username": "319915",
+    "password": "$2b$12$QYaV16L1yCF1ss9i4Qqs7Ocw/MRNM.UN4TRUw4fJXv7ENGFQacX.i",
+    "name": "马胤",
+    "role": "user",
+    "dept": "综合管理部",
+    "status": 1
+  },
+  {
+    "id": 11,
+    "username": "306253",
+    "password": "$2b$12$QYaV16L1yCF1ss9i4Qqs7Ocw/MRNM.UN4TRUw4fJXv7ENGFQacX.i",
+    "name": "杨萍",
+    "role": "user",
+    "dept": "数据测试部",
+    "status": 1
+  },
+  {
+    "id": 12,
+    "username": "305249",
+    "password": "$2b$12$QYaV16L1yCF1ss9i4Qqs7Ocw/MRNM.UN4TRUw4fJXv7ENGFQacX.i",
+    "name": "单曙兵",
+    "role": "user",
+    "dept": "数据治理部",
+    "status": 1
+  },
+  {
+    "id": 13,
+    "username": "302390",
+    "password": "$2b$12$QYaV16L1yCF1ss9i4Qqs7Ocw/MRNM.UN4TRUw4fJXv7ENGFQacX.i",
+    "name": "李焕彰",
+    "role": "user",
+    "dept": "信息管理部",
+    "status": 1
+  },
+  {
+    "id": 14,
+    "username": "305069",
+    "password": "$2b$12$QYaV16L1yCF1ss9i4Qqs7Ocw/MRNM.UN4TRUw4fJXv7ENGFQacX.i",
+    "name": "舒宝龙",
+    "role": "user",
+    "dept": "机构服务团队",
+    "status": 1
+  },
+  {
+    "id": 15,
+    "username": "306844",
+    "password": "$2b$12$QYaV16L1yCF1ss9i4Qqs7Ocw/MRNM.UN4TRUw4fJXv7ENGFQacX.i",
+    "name": "吴证",
+    "role": "user",
+    "dept": "数据平台部",
+    "status": 1
+  },
+  {
+    "id": 16,
+    "username": "303028",
+    "password": "$2b$12$QYaV16L1yCF1ss9i4Qqs7Ocw/MRNM.UN4TRUw4fJXv7ENGFQacX.i",
+    "name": "白迪",
+    "role": "user",
+    "dept": "数据平台部",
+    "status": 1
+  },
+  {
+    "id": 17,
+    "username": "319914",
+    "password": "$2b$12$QYaV16L1yCF1ss9i4Qqs7Ocw/MRNM.UN4TRUw4fJXv7ENGFQacX.i",
+    "name": "顾恺",
+    "role": "user",
+    "dept": "数据开发部",
+    "status": 1
+  },
+  {
+    "id": 18,
+    "username": "302330",
+    "password": "$2b$12$QYaV16L1yCF1ss9i4Qqs7Ocw/MRNM.UN4TRUw4fJXv7ENGFQacX.i",
+    "name": "杨青",
+    "role": "user",
+    "dept": "数据开发部",
+    "status": 1
+  },
+  {
+    "id": 19,
+    "username": "300523",
+    "password": "$2b$12$QYaV16L1yCF1ss9i4Qqs7Ocw/MRNM.UN4TRUw4fJXv7ENGFQacX.i",
+    "name": "贺文军",
+    "role": "user",
+    "dept": "信息统计部",
+    "status": 1
+  },
+  {
+    "id": 20,
+    "username": "304105",
+    "password": "$2b$12$QYaV16L1yCF1ss9i4Qqs7Ocw/MRNM.UN4TRUw4fJXv7ENGFQacX.i",
+    "name": "刘异",
+    "role": "user",
+    "dept": "研发管理部",
+    "status": 1
+  },
+  {
+    "id": 21,
+    "username": "307298",
+    "password": "$2b$12$QYaV16L1yCF1ss9i4Qqs7Ocw/MRNM.UN4TRUw4fJXv7ENGFQacX.i",
+    "name": "胡申民",
+    "role": "user",
+    "dept": "智能平台部",
+    "status": 1
+  },
+  {
+    "id": 22,
+    "username": "302577",
+    "password": "$2b$12$QYaV16L1yCF1ss9i4Qqs7Ocw/MRNM.UN4TRUw4fJXv7ENGFQacX.i",
+    "name": "杨晓彦",
+    "role": "user",
+    "dept": "智能应用一部",
+    "status": 1
+  },
+  {
+    "id": 23,
+    "username": "305393",
+    "password": "$2b$12$QYaV16L1yCF1ss9i4Qqs7Ocw/MRNM.UN4TRUw4fJXv7ENGFQacX.i",
+    "name": "陈嘉琳",
+    "role": "user",
+    "dept": "智能应用二部",
+    "status": 1
+  }
+]

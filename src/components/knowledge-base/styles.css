@@ -1,0 +1,196 @@
+/**
+ * 知识库页面样式
+ */
+
+.markdown-body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB',
+    'Microsoft YaHei', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+  font-size: 15px;
+  line-height: 1.8;
+  color: #333;
+}
+
+.markdown-body pre {
+  margin: 16px 0;
+  padding: 16px;
+  background: #f5f5f5;
+  border-radius: 6px;
+  overflow-x: auto;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+}
+
+.markdown-body pre code {
+  padding: 0;
+  background: transparent;
+  color: #333;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+}
+
+.markdown-body h1 {
+  font-size: 28px;
+  font-weight: 600;
+  margin: 24px 0 16px;
+  padding-bottom: 12px;
+  border-bottom: 2px solid #e8e8e8;
+}
+
+.markdown-body h2 {
+  font-size: 22px;
+  font-weight: 600;
+  margin: 20px 0 12px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.markdown-body h3 {
+  font-size: 18px;
+  font-weight: 600;
+  margin: 16px 0 8px;
+}
+
+.markdown-body p {
+  margin: 12px 0;
+  line-height: 1.8;
+}
+
+.markdown-body ul,
+.markdown-body ol {
+  margin: 12px 0;
+  padding-left: 28px;
+}
+
+.markdown-body li {
+  margin: 6px 0;
+  line-height: 1.8;
+}
+
+.markdown-body blockquote {
+  margin: 16px 0;
+  padding: 12px 16px;
+  background: #f9f9f9;
+  border-left: 4px solid #1890ff;
+  color: #666;
+}
+
+.markdown-body code {
+  padding: 2px 6px;
+  background: #f5f5f5;
+  border-radius: 3px;
+  font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+  font-size: 13px;
+  color: #d63200;
+}
+
+.markdown-body pre {
+  margin: 16px 0;
+  padding: 16px;
+  background: #f5f5f5;
+  border-radius: 6px;
+  overflow-x: auto;
+}
+
+.markdown-body pre code {
+  padding: 0;
+  background: transparent;
+  color: #333;
+}
+
+.markdown-body table {
+  width: 100%;
+  margin: 16px 0;
+  border-collapse: collapse;
+  border-spacing: 0;
+}
+
+.markdown-body table th,
+.markdown-body table td {
+  padding: 10px 12px;
+  border: 1px solid #e8e8e8;
+  text-align: left;
+}
+
+.markdown-body table th {
+  background: #fafafa;
+  font-weight: 600;
+}
+
+.markdown-body table tr:hover {
+  background: #fafafa;
+}
+
+.markdown-body hr {
+  margin: 24px 0;
+  border: none;
+  border-top: 1px solid #e8e8e8;
+}
+
+.markdown-body a {
+  color: #1890ff;
+  text-decoration: none;
+}
+
+.markdown-body a:hover {
+  text-decoration: underline;
+}
+
+.markdown-body img {
+  max-width: 100%;
+  border-radius: 6px;
+  margin: 16px 0;
+}
+
+/* 任务列表样式 */
+.markdown-body input[type="checkbox"] {
+  margin-right: 8px;
+  cursor: pointer;
+}
+
+/* 标签样式 */
+.markdown-body .tag {
+  display: inline-block;
+  padding: 2px 8px;
+  margin: 0 4px;
+  background: #f0f0f0;
+  border-radius: 3px;
+  font-size: 12px;
+  color: #666;
+}
+
+/* 统计卡片样式 */
+.ant-statistic-title {
+  font-size: 12px;
+  color: #999;
+}
+
+.ant-statistic-content {
+  font-size: 20px;
+  font-weight: 600;
+}
+
+/* 树节点图标颜色 */
+.ant-tree .anticon-calendar {
+  color: #1890ff;
+}
+
+.ant-tree .anticon-team {
+  color: #52c41a;
+}
+
+.ant-tree .anticon-tag {
+  color: #722ed1;
+}
+
+.ant-tree .anticon-file-text {
+  color: #fa8c16;
+}
+
+/* 树节点hover效果 */
+.ant-tree .ant-tree-node-content-wrapper:hover {
+  background-color: #f5f5f5;
+}
+
+.ant-tree .ant-tree-node-selected .ant-tree-node-content-wrapper {
+  background-color: #e6f7ff !important;
+}

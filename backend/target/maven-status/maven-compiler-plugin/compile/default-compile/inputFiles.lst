@@ -1,0 +1,10 @@
+/Users/spl/PycharmProjects/HRM/周报管理/backend/src/main/java/com/hr/backend/service/UserService.java
+/Users/spl/PycharmProjects/HRM/周报管理/backend/src/main/java/com/hr/backend/config/SecurityConfig.java
+/Users/spl/PycharmProjects/HRM/周报管理/backend/src/main/java/com/hr/backend/entity/User.java
+/Users/spl/PycharmProjects/HRM/周报管理/backend/src/main/java/com/hr/backend/dao/UserDao.java
+/Users/spl/PycharmProjects/HRM/周报管理/backend/src/main/java/com/hr/backend/utils/JwtUtils.java
+/Users/spl/PycharmProjects/HRM/周报管理/backend/src/main/java/com/hr/backend/HrApplication.java
+/Users/spl/PycharmProjects/HRM/周报管理/backend/src/main/java/com/hr/backend/filter/JwtAuthenticationFilter.java
+/Users/spl/PycharmProjects/HRM/周报管理/backend/src/main/java/com/hr/backend/controller/ReportController.java
+/Users/spl/PycharmProjects/HRM/周报管理/backend/src/main/java/com/hr/backend/service/ReportService.java
+/Users/spl/PycharmProjects/HRM/周报管理/backend/src/main/java/com/hr/backend/controller/AuthController.java

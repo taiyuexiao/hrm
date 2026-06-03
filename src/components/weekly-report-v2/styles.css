@@ -1,0 +1,228 @@
+/**
+ * 米哈游风格二次元 UI 样式
+ * Frosted glass, soft gradients, anime aesthetics
+ */
+
+/* 全局渐变背景 */
+.weekly-report-v2-root {
+  background: linear-gradient(135deg, #f5f0ff 0%, #e6f7ff 35%, #f0fff4 70%, #fff8f0 100%) !important;
+  min-height: 100vh;
+}
+
+/* 毛玻璃 Header */
+.mhy-header {
+  background: rgba(255, 255, 255, 0.72) !important;
+  backdrop-filter: blur(16px) saturate(1.2);
+  -webkit-backdrop-filter: blur(16px) saturate(1.2);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.6);
+  box-shadow: 0 2px 16px rgba(120, 80, 200, 0.08);
+}
+
+/* 毛玻璃侧边栏 */
+.mhy-sider {
+  background: rgba(255, 255, 255, 0.65) !important;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-right: 1px solid rgba(255, 255, 255, 0.5);
+}
+
+.mhy-sider-right {
+  background: rgba(255, 255, 255, 0.65) !important;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-left: 1px solid rgba(255, 255, 255, 0.5);
+}
+
+/* 科室列表项 */
+.mhy-dept-item {
+  padding: 10px 16px;
+  cursor: pointer;
+  font-size: 13px;
+  border-radius: 8px;
+  margin: 2px 8px;
+  transition: all 0.25s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+  position: relative;
+  overflow: hidden;
+}
+
+.mhy-dept-item:hover {
+  background: rgba(230, 247, 255, 0.8);
+  transform: translateX(4px);
+}
+
+.mhy-dept-item.active {
+  background: linear-gradient(90deg, rgba(24, 144, 255, 0.12) 0%, rgba(114, 46, 209, 0.08) 100%);
+  color: #1890ff;
+  font-weight: 600;
+  box-shadow: 0 2px 8px rgba(24, 144, 255, 0.15);
+}
+
+.mhy-dept-item.active::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 3px;
+  height: 60%;
+  background: linear-gradient(180deg, #1890ff 0%, #722ed1 100%);
+  border-radius: 0 3px 3px 0;
+}
+
+/* 二次元卡片 */
+.mhy-card {
+  border-radius: 16px !important;
+  border: 1px solid rgba(255, 255, 255, 0.6) !important;
+  background: rgba(255, 255, 255, 0.75) !important;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  box-shadow:
+    0 4px 20px rgba(120, 80, 200, 0.06),
+    0 1px 3px rgba(0, 0, 0, 0.04),
+    inset 0 1px 0 rgba(255, 255, 255, 0.8);
+  transition: all 0.3s ease;
+}
+
+.mhy-card:hover {
+  box-shadow:
+    0 8px 32px rgba(120, 80, 200, 0.1),
+    0 2px 6px rgba(0, 0, 0, 0.05),
+    inset 0 1px 0 rgba(255, 255, 255, 0.9);
+  transform: translateY(-1px);
+}
+
+/* 头像发光效果 */
+.mhy-avatar {
+  box-shadow: 0 0 8px currentColor;
+  transition: all 0.3s ease;
+}
+
+.mhy-avatar:hover {
+  box-shadow: 0 0 16px currentColor;
+  transform: scale(1.08);
+}
+
+/* 评论卡片 */
+.mhy-comment-card {
+  background: rgba(255, 255, 255, 0.6) !important;
+  backdrop-filter: blur(6px);
+  border-radius: 12px !important;
+  border: 1px solid rgba(255, 255, 255, 0.5) !important;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.03);
+  transition: all 0.2s ease;
+}
+
+.mhy-comment-card:hover {
+  background: rgba(255, 255, 255, 0.8) !important;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.06);
+}
+
+/* 进度条动画 */
+.mhy-progress-bar {
+  height: 8px;
+  background: rgba(240, 240, 240, 0.6);
+  border-radius: 4px;
+  overflow: hidden;
+  backdrop-filter: blur(4px);
+}
+
+.mhy-progress-fill {
+  height: 100%;
+  border-radius: 4px;
+  transition: width 0.8s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+  box-shadow: 0 0 8px currentColor;
+}
+
+/* AI 面板 */
+.mhy-ai-panel {
+  background: linear-gradient(135deg, rgba(240, 249, 255, 0.8) 0%, rgba(245, 240, 255, 0.8) 100%) !important;
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(186, 224, 255, 0.6) !important;
+  border-radius: 12px !important;
+}
+
+/* 按钮微光 */
+.mhy-btn-glow {
+  position: relative;
+  overflow: hidden;
+}
+
+.mhy-btn-glow::after {
+  content: '';
+  position: absolute;
+  top: -50%;
+  left: -50%;
+  width: 200%;
+  height: 200%;
+  background: linear-gradient(
+    45deg,
+    transparent 40%,
+    rgba(255, 255, 255, 0.15) 50%,
+    transparent 60%
+  );
+  transform: translateX(-100%);
+  transition: transform 0.6s;
+}
+
+.mhy-btn-glow:hover::after {
+  transform: translateX(100%);
+}
+
+/* 浮动标签 */
+.mhy-float-tag {
+  background: rgba(255, 255, 255, 0.8) !important;
+  backdrop-filter: blur(4px);
+  border: 1px solid rgba(255, 255, 255, 0.6) !important;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+}
+
+/* Tab 样式微调 */
+.mhy-tabs .ant-tabs-nav {
+  background: rgba(255, 255, 255, 0.4);
+  backdrop-filter: blur(8px);
+}
+
+/* 评论块跳动动画 */
+@keyframes commentBounce {
+  0% { transform: scale(1); }
+  25% { transform: scale(1.04); }
+  50% { transform: scale(1.02); }
+  75% { transform: scale(1.03); }
+  100% { transform: scale(1.02); }
+}
+
+.comment-card-bounce {
+  animation: commentBounce 0.5s ease forwards;
+  transform: scale(1.02);
+  box-shadow: 0 4px 16px rgba(24, 144, 255, 0.15) !important;
+  border-color: rgba(24, 144, 255, 0.3) !important;
+  transition: all 0.2s ease;
+}
+
+/* 任务行操作按钮：默认隐藏，hover 显示 */
+.task-row .task-actions {
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.task-row:hover .task-actions {
+  opacity: 1;
+}
+
+/* 滚动条美化 */
+.mhy-scroll::-webkit-scrollbar {
+  width: 5px;
+}
+
+.mhy-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.mhy-scroll::-webkit-scrollbar-thumb {
+  background: rgba(150, 150, 200, 0.3);
+  border-radius: 10px;
+}
+
+.mhy-scroll::-webkit-scrollbar-thumb:hover {
+  background: rgba(150, 150, 200, 0.5);
+}
