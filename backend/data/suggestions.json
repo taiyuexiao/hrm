@@ -1,0 +1,12 @@
+[ {
+  "id" : 1,
+  "userId" : "1",
+  "username" : "306852",
+  "name" : "于浩瀚",
+  "dept" : "总经理室",
+  "content" : "12344556",
+  "status" : "pending",
+  "adminReply" : null,
+  "createdAt" : "2026-07-16T13:39:55.186617",
+  "updatedAt" : "2026-07-16T13:39:55.186617"
+} ]

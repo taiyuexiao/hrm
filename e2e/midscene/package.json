@@ -1,0 +1,17 @@
+{
+  "name": "hr-weekly-e2e-midscene",
+  "private": true,
+  "version": "1.0.0",
+  "description": "周报系统 AI 驱动端到端测试（Midscene.js + 行内 LLM 网关）",
+  "scripts": {
+    "test": "playwright test",
+    "test:headed": "playwright test --headed"
+  },
+  "dependencies": {
+    "@midscene/web": "^0.30.0",
+    "dotenv": "^16.4.5"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.55.0"
+  }
+}

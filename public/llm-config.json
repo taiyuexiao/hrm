@@ -1,0 +1,6 @@
+{
+  "_comment": "前端不再直接调用大模型，此配置已废弃，仅保留以避免旧代码报错",
+  "baseUrl": "http://localhost:8080",
+  "apiKey": "unused",
+  "model": "unused"
+}

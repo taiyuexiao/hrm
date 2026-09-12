@@ -20,12 +20,26 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
         localStorage.setItem('auth-token', res.token);
         localStorage.setItem('auth-user', JSON.stringify(res.user));
         onLogin(res.token, res.user);
-        message.success('登录成功');
+        if (res.needChangePassword) {
+          message.info('首次登录，请修改初始密码');
+        } else {
+          message.success('登录成功');
+        }
       } else {
         message.error(res.message || '登录失败');
       }
     } catch (err: any) {
-      message.error('网络错误，请稍后重试');
+      console.error('登录异常:', err);
+      const errorMsg = err?.message || String(err);
+      if (errorMsg.includes('Failed to fetch') || errorMsg.includes('NetworkError')) {
+        message.error('网络错误，请检查后端服务是否可达');
+      } else if (errorMsg.includes('JSON')) {
+        message.error('后端返回格式异常，请检查后端服务');
+      } else if (errorMsg.includes('HTTP error')) {
+        message.error('后端服务异常：' + errorMsg);
+      } else {
+        message.error('登录失败：' + errorMsg);
+      }
     } finally {
       setLoading(false);
     }
@@ -46,7 +60,7 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
         bodyStyle={{ padding: '40px 32px' }}
       >
         <div style={{ textAlign: 'center', marginBottom: 32 }}>
-          <Title level={3} style={{ margin: 0, color: '#333' }}>智能人才管理系统</Title>
+          <Title level={3} style={{ margin: 0, color: '#333' }}>数据部管理工作台</Title>
           <Text type="secondary" style={{ fontSize: 13 }}>请使用部门账号登录</Text>
         </div>
 

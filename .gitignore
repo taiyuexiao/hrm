@@ -12,6 +12,14 @@ dist
 dist-ssr
 *.local
 
+# 原始业务数据（考勤/代码量/工时等源文件，已归档备份，不入库不入仓）
+/data/
+
+# E2E 测试产物
+**/test-results/
+**/playwright-report/
+**/blob-report/
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

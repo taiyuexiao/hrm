@@ -6,7 +6,9 @@ import { Layout, Tree, Card, Button, Space, Dropdown, message, Input, Empty, Spi
 import {
   DownloadOutlined, SearchOutlined, FileTextOutlined, FolderOutlined,
   CalendarOutlined, TeamOutlined, TagOutlined, CopyOutlined, ReloadOutlined,
+  ArrowLeftOutlined, CloseOutlined,
 } from '@ant-design/icons';
+import { useNavigate } from 'react-router-dom';
 import type { DataNode } from 'antd/es/tree';
 import ReactMarkdown from 'react-markdown';
 import { getReports } from '../weekly-report-v2/data';
@@ -18,7 +20,12 @@ import './styles.css';
 const { Sider, Content } = Layout;
 const { Search } = Input;
 
-const KnowledgeBase: React.FC = () => {
+interface KnowledgeBaseProps {
+  onClose?: () => void;
+}
+
+const KnowledgeBase: React.FC<KnowledgeBaseProps> = ({ onClose }) => {
+  const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [exporting, setExporting] = useState(false);
   const [treeData, setTreeData] = useState<DataNode[]>([]);
@@ -176,6 +183,11 @@ const KnowledgeBase: React.FC = () => {
     });
   };
 
+  // 去除 YAML frontmatter
+  const stripFrontmatter = (md: string): string => {
+    return md.replace(/^---\s*\n[\s\S]*?\n---\s*\n*/, '');
+  };
+
   // 刷新知识库
   const handleRefresh = () => {
     setLoading(true);
@@ -188,10 +200,18 @@ const KnowledgeBase: React.FC = () => {
     }, 500);
   };
 
+  const handleClose = () => {
+    if (onClose) {
+      onClose();
+    } else {
+      navigate('/weekly-report-v2');
+    }
+  };
+
   return (
     <Layout style={{ height: '100%', background: '#f0f2f5' }}>
       {/* 左侧目录树 */}
-      <Sider width={320} style={{ background: '#fff', borderRight: '1px solid #e8e8e8', overflow: 'auto' }}>
+      <Sider width={320} style={{ background: '#fff', borderRight: '1px solid #e8e8e8', overflow: 'auto', position: 'relative', height: '100%', left: 'auto', top: 'auto', minWidth: 320 }}>
         {/* 统计概览 */}
         <Card size="small" style={{ margin: '16px 16px 16px', borderRadius: 8 }}>
           <Row gutter={8}>
@@ -246,10 +266,15 @@ const KnowledgeBase: React.FC = () => {
       </Sider>
 
       {/* 右侧内容预览 */}
-      <Content style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+      <Content style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden', marginLeft: 0, padding: 0, minHeight: 'auto' }}>
         {/* 工具栏 */}
-        <div style={{ background: '#fff', padding: '12px 24px', borderBottom: '1px solid #e8e8e8' }}>
+        <div style={{ background: '#fff', padding: '12px 24px', borderBottom: '1px solid #e8e8e8', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <Space>
+            {onClose && (
+              <Button icon={<ArrowLeftOutlined />} onClick={onClose}>
+                返回
+              </Button>
+            )}
             <Dropdown
               menu={{
                 items: [
@@ -303,6 +328,7 @@ const KnowledgeBase: React.FC = () => {
               </Space>
             )}
           </Space>
+          <Button type="text" icon={<CloseOutlined />} onClick={handleClose} style={{ fontSize: 16 }} />
         </div>
 
         {/* 内容区域 */}
@@ -313,7 +339,7 @@ const KnowledgeBase: React.FC = () => {
               bodyStyle={{ padding: '32px 48px' }}
             >
               <div className="markdown-body">
-                <ReactMarkdown>{selectedNode.content}</ReactMarkdown>
+                <ReactMarkdown>{stripFrontmatter(selectedNode.content)}</ReactMarkdown>
               </div>
             </Card>
           ) : (

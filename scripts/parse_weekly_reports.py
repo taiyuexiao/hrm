@@ -9,11 +9,8 @@ from datetime import datetime
 import re
 
 def date_to_week_label(date_str):
-    """将日期字符串转换为周标签 (e.g. 2026-03-27 -> 2026-W13)"""
-    d = datetime.strptime(date_str, '%Y%m%d')
-    # ISO week calculation
-    iso_calendar = d.isocalendar()
-    return f"{iso_calendar[0]}-W{iso_calendar[1]:02d}"
+    """周标签直接使用日期字符串 (e.g. 20260327)"""
+    return date_str
 
 def parse_plan_to_tasks(plan_text):
     """将计划文本解析为任务列表"""
@@ -83,23 +80,23 @@ def parse_excel_to_json(excel_dir, output_file):
         '智能应用二部': '智能应用二部',
     }
 
-    # 用户映射（扩展到所有团队）
+    # 用户映射（真实用户）
     user_map = {
-        '项目管理': {'id': 'user1', 'name': '项目管理-小明'},
-        '需求管理': {'id': 'user2', 'name': '需求管理-小红'},
-        '架构管理': {'id': 'user3', 'name': '架构管理-小刚'},
-        '综合管理部': {'id': 'user4', 'name': '综合管理-小蓝'},
-        '机构服务团队': {'id': 'user5', 'name': '机构服务-小绿'},
-        '信息统计部': {'id': 'user6', 'name': '信息统计-小紫'},
-        '信息管理部': {'id': 'user7', 'name': '信息管理-小橙'},
-        '数据开发部': {'id': 'user8', 'name': '数据开发-小黄'},
-        '数据平台部': {'id': 'user9', 'name': '数据平台-小粉'},
-        '数据治理部': {'id': 'user10', 'name': '数据治理-小灰'},
-        '数据测试部': {'id': 'user11', 'name': '数据测试-小白'},
-        '智能平台部': {'id': 'user12', 'name': '智能平台-小黑'},
-        '研发管理部': {'id': 'user13', 'name': '研发管理-小棕'},
-        '智能应用一部': {'id': 'user14', 'name': '智能应用一-小青'},
-        '智能应用二部': {'id': 'user15', 'name': '智能应用二-小银'},
+        '项目管理': {'id': 'xmgl', 'name': '项目管理'},
+        '需求管理': {'id': 'xqgl', 'name': '需求管理'},
+        '架构管理': {'id': 'jggl', 'name': '架构管理'},
+        '综合管理部': {'id': '319915', 'name': '马胤'},
+        '机构服务团队': {'id': '305069', 'name': '舒宝龙'},
+        '信息统计部': {'id': '300523', 'name': '贺文军'},
+        '信息管理部': {'id': '302390', 'name': '李焕彰'},
+        '数据开发部': {'id': '319914', 'name': '顾恺'},
+        '数据平台部': {'id': '306844', 'name': '吴证'},
+        '数据治理部': {'id': '305249', 'name': '单曙兵'},
+        '数据测试部': {'id': '306253', 'name': '杨萍'},
+        '智能平台部': {'id': '307298', 'name': '胡申民'},
+        '研发管理部': {'id': '304105', 'name': '刘异'},
+        '智能应用一部': {'id': '302577', 'name': '杨晓彦'},
+        '智能应用二部': {'id': '305393', 'name': '陈嘉琳'},
     }
 
     # 遍历所有Excel文件
@@ -107,14 +104,13 @@ def parse_excel_to_json(excel_dir, output_file):
         if not filename.endswith('.xlsx') or filename.startswith('~'):
             continue
 
-        # 从文件名提取周标签：数据部工作周报-W12-20260327.xlsx
-        week_match = re.search(r'-W(\d+)-', filename)
-        if not week_match:
-            print(f"⚠️  跳过文件（无法提取周数）: {filename}")
+        # 从文件名提取日期：数据部工作周报-20260327.xlsx
+        date_match = re.search(r'-(\d{8})\.xlsx$', filename)
+        if not date_match:
+            print(f"⚠️  跳过文件（无法提取日期）: {filename}")
             continue
 
-        week_num = int(week_match.group(1))
-        week_label = f"2026-W{week_num:02d}"
+        week_label = date_match.group(1)
 
         file_path = os.path.join(excel_dir, filename)
         print(f"处理文件: {filename} -> {week_label}")

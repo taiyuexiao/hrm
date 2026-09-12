@@ -1,0 +1,36 @@
+# 生产环境配置文件
+# 将此文件放在 intelligent-hr-backend-1.0.0.jar 同级目录即可生效，
+# 会覆盖 jar 包内部的默认配置。
+
+app:
+  # 数据库文件存放目录（建议改为绝对路径）
+  data-dir: ${DATA_DIR:/opt/hr-weekly/data}
+
+server:
+  # 后端服务端口
+  port: ${SERVER_PORT:8080}
+
+spring:
+  datasource:
+    url: jdbc:sqlite:${app.data-dir}/hr.db
+    driver-class-name: org.sqlite.JDBC
+    hikari:
+      maximum-pool-size: 1
+
+jwt:
+  # 生产环境请务必修改 JWT 密钥
+  secret: ${JWT_SECRET:CHANGE_THIS_IN_PRODUCTION}
+  expiration: ${JWT_EXPIRATION:86400000}
+
+report:
+  legacy-data-file: ${app.data-dir}/weekly-reports.json
+
+llm:
+  # 大模型网关配置：前端不再直接调用 LLM，统一由后端转发
+  # 请填入实际的大模型网关地址、Key 和模型名称
+  base-url: ${LLM_BASE_URL:http://10.202.32.20:8180/lm/v2}
+  api-key: ${LLM_API_KEY:}
+  model: ${LLM_MODEL:qwen35-35b-a3b-nothink}
+  chat-completion-path: ${LLM_CHAT_COMPLETION_PATH:/chat/completions}
+  connect-timeout: ${LLM_CONNECT_TIMEOUT:10000}
+  read-timeout: ${LLM_READ_TIMEOUT:120000}

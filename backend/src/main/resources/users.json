@@ -4,7 +4,7 @@
     "username": "306852",
     "password": "$2b$12$iPKMD69pnUL.AzBwipzUruSOuwj6fEcfbVeMBL2wkbFrWrcZzPASO",
     "name": "于浩瀚",
-    "role": "admin",
+    "role": "leader",
     "dept": "总经理室",
     "status": 1
   },
@@ -13,7 +13,7 @@
     "username": "314043",
     "password": "$2b$12$iPKMD69pnUL.AzBwipzUruSOuwj6fEcfbVeMBL2wkbFrWrcZzPASO",
     "name": "宋晓迪",
-    "role": "admin",
+    "role": "leader",
     "dept": "总经理室",
     "status": 1
   },
@@ -22,7 +22,7 @@
     "username": "301953",
     "password": "$2b$12$iPKMD69pnUL.AzBwipzUruSOuwj6fEcfbVeMBL2wkbFrWrcZzPASO",
     "name": "徐启鹏",
-    "role": "admin",
+    "role": "leader",
     "dept": "总经理室",
     "status": 1
   },
@@ -31,15 +31,15 @@
     "username": "306776",
     "password": "$2b$12$iPKMD69pnUL.AzBwipzUruSOuwj6fEcfbVeMBL2wkbFrWrcZzPASO",
     "name": "卢易",
-    "role": "admin",
+    "role": "leader",
     "dept": "总经理室",
     "status": 1
   },
   {
     "id": 5,
-    "username": "303439",
+    "username": "303423",
     "password": "$2b$12$iPKMD69pnUL.AzBwipzUruSOuwj6fEcfbVeMBL2wkbFrWrcZzPASO",
-    "name": "管理员",
+    "name": "许阿云",
     "role": "admin",
     "dept": "系统管理员",
     "status": 1
@@ -49,33 +49,33 @@
     "username": "33528",
     "password": "$2b$12$iPKMD69pnUL.AzBwipzUruSOuwj6fEcfbVeMBL2wkbFrWrcZzPASO",
     "name": "管理员",
-    "role": "admin",
+    "role": "superadmin",
     "dept": "系统管理员",
     "status": 1
   },
   {
     "id": 7,
-    "username": "xmgl",
+    "username": "302273",
     "password": "$2b$12$QYaV16L1yCF1ss9i4Qqs7Ocw/MRNM.UN4TRUw4fJXv7ENGFQacX.i",
-    "name": "项目管理",
+    "name": "乐洋",
     "role": "user",
     "dept": "项目管理",
     "status": 1
   },
   {
     "id": 8,
-    "username": "xqgl",
+    "username": "306270",
     "password": "$2b$12$QYaV16L1yCF1ss9i4Qqs7Ocw/MRNM.UN4TRUw4fJXv7ENGFQacX.i",
-    "name": "需求管理",
+    "name": "范佳",
     "role": "user",
     "dept": "需求管理",
     "status": 1
   },
   {
     "id": 9,
-    "username": "jggl",
+    "username": "306811",
     "password": "$2b$12$QYaV16L1yCF1ss9i4Qqs7Ocw/MRNM.UN4TRUw4fJXv7ENGFQacX.i",
-    "name": "架构管理",
+    "name": "米俊文",
     "role": "user",
     "dept": "架构管理",
     "status": 1
@@ -85,7 +85,7 @@
     "username": "319915",
     "password": "$2b$12$QYaV16L1yCF1ss9i4Qqs7Ocw/MRNM.UN4TRUw4fJXv7ENGFQacX.i",
     "name": "马胤",
-    "role": "user",
+    "role": "admin",
     "dept": "综合管理部",
     "status": 1
   },

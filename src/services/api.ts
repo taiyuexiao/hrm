@@ -1,4 +1,4 @@
-const API_BASE_URL = 'http://localhost:8081/api';
+import { getApiBaseUrl } from '../config/app';
 
 const mockData = {
   dashboardMetrics: {
@@ -213,44 +213,74 @@ function generateEmployees(count: number) {
 }
 
 async function request<T>(url: string, options: RequestInit = {}): Promise<T> {
+  const token = localStorage.getItem('auth-token');
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    ...options.headers as Record<string, string>,
+  };
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+
+  let response: Response;
   try {
-    const token = localStorage.getItem('auth-token');
-    const headers: Record<string, string> = {
-      'Content-Type': 'application/json',
-      ...options.headers as Record<string, string>,
-    };
-    if (token) {
-      headers['Authorization'] = `Bearer ${token}`;
-    }
-    const response = await fetch(`${API_BASE_URL}${url}`, {
+    response = await fetch(`${getApiBaseUrl()}${url}`, {
       ...options,
       headers,
     });
+  } catch (error: any) {
+    console.error(`API request network error [${url}]:`, error);
+    throw new Error('网络请求失败：' + (error?.message || '无法连接到后端服务'));
+  }
 
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
-    }
+  if (!response.ok) {
+    const text = await response.text().catch(() => '');
+    console.error(`API request HTTP error [${url}]:`, response.status, text);
+    throw new Error(`HTTP error! status: ${response.status}, ${text.slice(0, 200)}`);
+  }
 
+  try {
     return await response.json();
-  } catch (error) {
-    console.warn(`API request failed, using mock data for ${url}:`, error);
-    throw error;
+  } catch (error: any) {
+    console.error(`API response JSON parse error [${url}]:`, error);
+    throw new Error('后端返回格式异常：' + (error?.message || '无法解析 JSON'));
   }
 }
 
 export const authApi = {
   login: (username: string, password: string) => {
-    return request<{ success: boolean; token: string; user: any; message?: string }>('/auth/login', {
+    return request<{ success: boolean; token: string; user: any; needChangePassword?: boolean; message?: string }>('/auth/login', {
       method: 'POST',
       body: JSON.stringify({ username, password }),
     });
   },
   changePassword: (username: string, oldPassword: string, newPassword: string) => {
-    return request<{ success: boolean; message?: string }>('/auth/change-password', {
+    return request<{ success: boolean; token?: string; message?: string }>('/auth/change-password', {
       method: 'POST',
       body: JSON.stringify({ username, oldPassword, newPassword }),
     });
   },
+  // 管理员账号管理
+  listUsers: () => request<{ success: boolean; users?: any[]; message?: string }>('/auth/users'),
+  createUser: (user: { username: string; password: string; name: string; role: string; dept: string }) =>
+    request<{ success: boolean; message?: string }>('/auth/users', {
+      method: 'POST',
+      body: JSON.stringify(user),
+    }),
+  deleteUser: (username: string) =>
+    request<{ success: boolean; message?: string }>(`/auth/users/${username}`, {
+      method: 'DELETE',
+    }),
+  updateUser: (username: string, data: { newUsername?: string; name?: string; role?: string }) =>
+    request<{ success: boolean; message?: string }>(`/auth/users/${username}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    }),
+  resetPassword: (username: string, newPassword: string) =>
+    request<{ success: boolean; message?: string }>(`/auth/users/${username}/reset-password`, {
+      method: 'POST',
+      body: JSON.stringify({ newPassword }),
+    }),
 };
 
 export const employeeApi = {
@@ -418,5 +448,43 @@ export const alertApi = {
   },
   getAlertList: () => {
     return request<any>('/alert/list');
+  },
+};
+
+export interface Suggestion {
+  id: number;
+  userId: string;
+  username: string;
+  name: string;
+  dept: string;
+  content: string;
+  status: 'pending' | 'resolved' | 'ignored';
+  adminReply?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export const suggestionApi = {
+  submit: (content: string) => {
+    return request<{ success: boolean; message?: string; data?: Suggestion }>('/suggestions', {
+      method: 'POST',
+      body: JSON.stringify({ content }),
+    });
+  },
+  list: (params?: { page?: number; size?: number; status?: string; keyword?: string }) => {
+    const query = new URLSearchParams();
+    if (params?.page) query.set('page', String(params.page));
+    if (params?.size) query.set('size', String(params.size));
+    if (params?.status) query.set('status', params.status);
+    if (params?.keyword) query.set('keyword', params.keyword);
+    return request<{ success: boolean; message?: string; data?: Suggestion[]; total?: number; page?: number; size?: number }>(
+      `/suggestions?${query.toString()}`
+    );
+  },
+  update: (id: number, data: { status: string; adminReply?: string }) => {
+    return request<{ success: boolean; message?: string; data?: Suggestion }>(`/suggestions/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
   },
 };

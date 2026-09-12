@@ -7,7 +7,7 @@ import json
 import time
 import requests
 
-from llm_config import API_KEY, get_chat_completion_url
+from llm_config import API_KEY, get_chat_completion_url, MODEL
 
 API_URL = get_chat_completion_url()
 INPUT_PATH = "src/data/weekly-reports.json"
@@ -32,7 +32,7 @@ def generate_summary(record: dict, retries: int = 3) -> str:
 """
 
     payload = {
-        "model": "deepseek-chat",
+        "model": MODEL,
         "messages": [
             {"role": "system", "content": "你是数据部门的管理顾问，擅长快速提炼工作周报的核心要点。"},
             {"role": "user", "content": prompt},

@@ -1,8 +1,105 @@
 /**
  * 知识库生成器 - 将周报数据转换为Markdown格式
  */
-import { WeeklyReport } from '../weekly-report-v2/types';
+import { WeeklyReport, TaskItem } from '../weekly-report-v2/types';
 import { KnowledgeBaseNode, KnowledgeBaseStats } from './types';
+
+function indent(level: number): string {
+  return '  '.repeat(level);
+}
+
+/**
+ * 将任务树渲染为 Markdown 无序列表（带层级缩进）
+ */
+function renderTaskTree(tasks: TaskItem[], level = 0): string {
+  return tasks
+    .map(task => {
+      const prefix = `${indent(level)}- `;
+      const checkedMark = task.checked ? '（已完成）' : '';
+      const text = `${prefix}${task.text}${checkedMark}`;
+      const children = task.children?.length
+        ? '\n' + renderTaskTree(task.children, level + 1)
+        : '';
+      return text + children;
+    })
+    .join('\n');
+}
+
+/**
+ * 尝试把字符串解析为任务数组
+ */
+function parseTaskString(value: string | TaskItem[]): TaskItem[] {
+  if (Array.isArray(value)) return value;
+  if (typeof value === 'string' && value.trim().startsWith('[')) {
+    try {
+      const parsed = JSON.parse(value);
+      if (Array.isArray(parsed)) return parsed;
+    } catch {
+      // ignore
+    }
+  }
+  return [];
+}
+
+/**
+ * 把带各种中文序号的文本转换为规范的多级 Markdown 无序列表
+ * 支持：1、 1. 1． （1） 1） ① 等，以及行内用“；”分隔的二级条目
+ */
+function textToBulletList(text: string): string {
+  // 先把行内二级条目拆开
+  // 1、标题：1）子项1；2）子项2 -> 1、标题：\n1）子项1\n2）子项2
+  let expanded = text
+    .replace(/[：；]\s*(?:（(\d+)）|(\d+)[）])/g, '\n$1$2） ')
+    .replace(/^(\d+)[、．]\s*/gm, '- ');
+
+  const lines = expanded.split('\n').map(l => l.trim()).filter(Boolean);
+  const result: string[] = [];
+
+  lines.forEach(line => {
+    // 一级条目（已被替换为 - ）
+    if (line.startsWith('- ')) {
+      result.push(line);
+      return;
+    }
+
+    // 二级条目：（1）xxx 或 1）xxx
+    const subMatch = line.match(/^(?:（(\d+)）|(\d+)[）])\s*(.+)$/);
+    if (subMatch) {
+      result.push(`${indent(1)}- ${subMatch[3]}`);
+      return;
+    }
+
+    // 三级条目：①②③
+    const circleMatch = line.match(/^[①②③④⑤⑥⑦⑧⑨⑩]\s*(.+)$/);
+    if (circleMatch) {
+      result.push(`${indent(2)}- ${circleMatch[1]}`);
+      return;
+    }
+
+    // 普通续行，拼到上一项
+    if (result.length > 0) {
+      result[result.length - 1] += ' ' + line;
+    } else {
+      result.push(`- ${line}`);
+    }
+  });
+
+  return result.join('\n');
+}
+
+/**
+ * 渲染下周工作计划：优先按任务树解析，否则按文本转列表
+ */
+function renderNextPlan(nextPlan: string): string {
+  const tasks = parseTaskString(nextPlan);
+  if (tasks.length > 0) {
+    return renderTaskTree(tasks);
+  }
+  if (nextPlan && nextPlan.trim()) {
+    return textToBulletList(nextPlan);
+  }
+  return '（无下周计划）';
+}
 
 /**
  * 生成单个周报的Markdown内容
@@ -43,12 +140,8 @@ tags: [${tags.join(', ')}]
 
 `;
 
-  // 上周计划任务列表
   if (content.length > 0) {
-    content.forEach(task => {
-      const checkbox = task.checked ? '[x]' : '[ ]';
-      md += `- ${checkbox} ${task.text}\n`;
-    });
+    md += renderTaskTree(content) + '\n';
     md += `\n**完成率**: ${completionRate}% (${completedTasks}/${totalTasks})\n`;
   } else {
     md += '（无上周计划）\n';
@@ -61,7 +154,7 @@ tags: [${tags.join(', ')}]
 `;
 
   if (currentWork && currentWork.trim()) {
-    md += currentWork + '\n';
+    md += textToBulletList(currentWork) + '\n';
   } else {
     md += '（无本周工作内容）\n';
   }
@@ -72,11 +165,7 @@ tags: [${tags.join(', ')}]
 
 `;
 
-  if (nextPlan && nextPlan.trim()) {
-    md += nextPlan + '\n';
-  } else {
-    md += '（无下周计划）\n';
-  }
+  md += renderNextPlan(nextPlan) + '\n';
 
   md += `\n---
 
@@ -85,7 +174,7 @@ tags: [${tags.join(', ')}]
 `;
 
   if (thoughts && thoughts.trim()) {
-    md += thoughts + '\n';
+    md += textToBulletList(thoughts) + '\n';
   } else {
     md += '（无本周心得）\n';
   }
@@ -97,7 +186,7 @@ tags: [${tags.join(', ')}]
 `;
 
   if (other && other.trim()) {
-    md += other + '\n';
+    md += textToBulletList(other) + '\n';
   } else {
     md += '（无问题与风险）\n';
   }
@@ -118,7 +207,7 @@ tags: [${tags.join(', ')}]
         const blockNames: Record<string, string> = {
           content: '本周工作内容',
           nextPlan: '下周工作计划',
-          thoughts: '本周心得',
+          thoughts: '其他',
           other: '问题与风险',
         };
         md += `**针对**: ${blockNames[comment.targetBlock]}`;

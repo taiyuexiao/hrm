@@ -40,19 +40,30 @@ body {
 
 .ant-layout-sider {
   overflow: auto;
-  height: 100vh;
+  height: calc(100vh - 64px);
   position: fixed;
   left: 0;
-  top: 0;
+  top: 64px;
   bottom: 0;
   min-width: 200px;
   width: 200px;
+}
+
+/* Sider 收起时宽度变为 80px */
+.ant-layout-sider.ant-layout-sider-collapsed {
+  min-width: 80px !important;
+  width: 80px !important;
 }
 
 .ant-layout-content {
   margin-left: 200px;
   padding: 24px;
   min-height: 100vh;
+}
+
+/* Sider 收起时，Content 左移填补空白 */
+.ant-layout-sider-collapsed ~ .site-layout .ant-layout-content {
+  margin-left: 80px;
 }
 
 /* 响应式调整 */

@@ -2,55 +2,212 @@
  * 数据层 - 后端 JSON 文件存储
  * force-hmr: 1
  */
-import { WeeklyReport, User, SYSTEM_USERS, TaskItem } from './types';
+import { WeeklyReport, User, SYSTEM_USERS, DEPTS, TaskItem, genAvatar } from './types';
 
-const API_BASE = '/api';
+import { getApiBaseUrl } from '../../config/app';
+import frozenReportsRaw from '../../data/frozen-weekly-reports.json';
+
+const FROZEN_REPORTS: WeeklyReport[] = frozenReportsRaw as unknown as WeeklyReport[];
+const FROZEN_UNTIL_WEEK = '20260529';
+
 let _reports: WeeklyReport[] = [];
 let _loaded = false;
+// 回收站中的周期（软删除）：从周下拉框中排除，但数据仍在后端，可一键恢复
+let _deletedWeeks = new Set<string>();
+
+export function isFrozenWeek(weekLabel: string): boolean {
+  return weekLabel <= FROZEN_UNTIL_WEEK;
+}
 
 async function fetchReports(): Promise<WeeklyReport[]> {
-  const resp = await fetch(`${API_BASE}/reports`, {
+  const resp = await fetch(`${getApiBaseUrl()}/reports`, {
     headers: { 'Cache-Control': 'no-cache' },
   });
   if (!resp.ok) throw new Error(`后端返回 ${resp.status}: ${await resp.text()}`);
   return resp.json();
 }
 
-async function pushReport(report: WeeklyReport): Promise<void> {
-  await fetch(`${API_BASE}/reports`, {
+interface PushReportResult {
+  success: boolean;
+  code?: string;
+  message?: string;
+  reason?: string;
+  report?: WeeklyReport;
+}
+
+async function pushReport(report: WeeklyReport): Promise<PushReportResult> {
+  const token = localStorage.getItem('auth-token');
+  const resp = await fetch(`${getApiBaseUrl()}/reports`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token || ''}`,
+    },
     body: JSON.stringify(report),
   });
+  if (!resp.ok) {
+    const text = await resp.text();
+    throw new Error(`保存失败 ${resp.status}: ${text}`);
+  }
+  const result = await resp.json();
+  if (result.success === false) {
+    return {
+      success: false,
+      code: result.code,
+      message: result.message || '保存被拒绝',
+      reason: result.reason,
+      report: result.report,
+    };
+  }
+  return { success: true, report: result.report };
 }
 
 export async function loadReports(): Promise<void> {
-  _reports = await fetchReports();
+  const [backendReports, deletedWeeks] = await Promise.all([
+    fetchReports(),
+    fetchDeletedWeeks(),
+  ]);
+  // 0529 及之前的历史周报已固化到前端，避免被后端导入/修改覆盖。
+  // 但如果后端出现了本地 frozen 中不存在的周期（如生产中新增的 20260518/20260525），
+  // 仍要补充进来，否则前端周次下拉框会缺失这些真实数据。
+  const frozenWeeks = new Set(FROZEN_REPORTS.map(r => r.weekLabel));
+  const backendSupplement = backendReports.filter(r => !frozenWeeks.has(r.weekLabel));
+  _reports = [...FROZEN_REPORTS, ...backendSupplement];
+  _deletedWeeks = new Set(deletedWeeks);
   _loaded = true;
+}
+
+/** 回收站中的周期标签列表（后端软删除状态） */
+async function fetchDeletedWeeks(): Promise<string[]> {
+  try {
+    const resp = await fetch(`${getApiBaseUrl()}/reports/deleted-weeks`, {
+      headers: { 'Cache-Control': 'no-cache' },
+    });
+    if (!resp.ok) return [];
+    return resp.json();
+  } catch {
+    return [];
+  }
 }
 
 export function getReports(): WeeklyReport[] {
   return _reports;
 }
 
-export function saveReport(report: WeeklyReport) {
-  const idx = _reports.findIndex(r => r.id === report.id);
-  if (idx >= 0) {
-    _reports[idx] = { ...report, updatedAt: new Date().toISOString() };
-  } else {
-    _reports.push({ ...report, updatedAt: new Date().toISOString() });
+/** 该周期是否在回收站中（软删除状态） */
+export function isWeekInRecycleBin(weekLabel: string): boolean {
+  return _deletedWeeks.has(weekLabel);
+}
+
+export function hasTextContent(value: string | undefined | null): boolean {
+  if (value == null) return false;
+  const s = value.trim();
+  return s !== '' && s !== '[]' && s !== '{}';
+}
+
+export function reportHasContent(report: WeeklyReport): boolean {
+  return (
+    hasTextContent(report.plan) ||
+    hasTextContent(report.currentWork) ||
+    hasTextContent(report.nextPlan) ||
+    hasTextContent(report.thoughts) ||
+    hasTextContent(report.other) ||
+    report.content.length > 0 ||
+    (report.comments?.length || 0) > 0
+  );
+}
+
+function mergeReportUpdate(existing: WeeklyReport | undefined, update: WeeklyReport): WeeklyReport {
+  return {
+    ...(existing || update),
+    ...update,
+    // 后端 save 接口不返回这些衍生/关联字段，保留本地已有值避免渲染时报 undefined
+    comments: update.comments ?? existing?.comments ?? [],
+    aiAnalysis: update.aiAnalysis ?? existing?.aiAnalysis ?? null,
+    aiSummary: update.aiSummary ?? existing?.aiSummary ?? null,
+    deadlineRemaining: update.deadlineRemaining ?? existing?.deadlineRemaining ?? null,
+    deadlinePassed: update.deadlinePassed ?? existing?.deadlinePassed ?? null,
+  } as WeeklyReport;
+}
+
+export function saveReport(report: WeeklyReport): Promise<void> | void {
+  // 历史周报（0529 及之前）固化到前端，禁止保存覆盖
+  if (isFrozenWeek(report.weekLabel)) {
+    console.log(`⏸ 历史周报 ${report.weekLabel} 已固化，跳过保存`);
+    return;
   }
-  // 过滤空数据：核心字段全空时不推送到后端，避免污染数据库
-  const hasContent = !!report.currentWork || !!report.nextPlan || !!report.thoughts || !!report.other || report.content.length > 0;
-  if (!hasContent) {
+  // 按 weekLabel + dept 查找，避免前后端 ID 格式不一致导致重复条目
+  const idx = _reports.findIndex(r => r.weekLabel === report.weekLabel && r.dept === report.dept);
+  const existing = idx >= 0 ? _reports[idx] : undefined;
+  const optimistic = mergeReportUpdate(existing, report);
+  if (idx >= 0) {
+    _reports[idx] = optimistic;
+  } else {
+    _reports.push(optimistic);
+  }
+  // 过滤空数据：核心字段全空且无批注时不推送到后端，避免污染数据库
+  if (!reportHasContent(optimistic)) {
     console.log('⏸ 跳过空数据保存');
     return;
   }
-  pushReport(_reports[idx >= 0 ? idx : _reports.length - 1]).catch(console.error);
+  // 注意：不要在这里重置 updatedAt，否则后端乐观锁会冲突
+  return pushReport(report).then(result => {
+    if (!result.success) {
+      const err: any = new Error(result.message || '保存被拒绝');
+      err.code = result.code;
+      err.reason = result.reason;
+      err.report = result.report;
+      throw err;
+    }
+    // 用后端返回的最新版本更新本地缓存，保证后续保存的 updatedAt 是最新的
+    const saved = result.report || report;
+    const savedIdx = _reports.findIndex(r => r.weekLabel === saved.weekLabel && r.dept === saved.dept);
+    const merged = mergeReportUpdate(savedIdx >= 0 ? _reports[savedIdx] : undefined, saved as WeeklyReport);
+    if (savedIdx >= 0) {
+      _reports[savedIdx] = merged;
+    } else {
+      _reports.push(merged);
+    }
+  });
 }
 
 export function getReport(weekLabel: string, dept: string): WeeklyReport | undefined {
   return _reports.find(r => r.weekLabel === weekLabel && r.dept === dept);
+}
+
+export async function fetchReportDetail(weekLabel: string, dept: string): Promise<WeeklyReport | null> {
+  // 历史周报直接返回前端固化数据，避免被后端覆盖
+  const frozen = FROZEN_REPORTS.find(r => r.weekLabel === weekLabel && r.dept === dept);
+  if (frozen) return frozen;
+  try {
+    const token = localStorage.getItem('auth-token');
+    const resp = await fetch(`${getApiBaseUrl()}/reports/${encodeURIComponent(weekLabel)}/${encodeURIComponent(dept)}`, {
+      headers: {
+        'Cache-Control': 'no-cache',
+        'Authorization': `Bearer ${token || ''}`,
+      },
+    });
+    if (!resp.ok) return null;
+    return resp.json();
+  } catch {
+    return null;
+  }
+}
+
+export async function submitReportApi(weekLabel: string, dept: string): Promise<{ success: boolean; message?: string; reason?: string }> {
+  try {
+    const token = localStorage.getItem('auth-token');
+    const resp = await fetch(`${getApiBaseUrl()}/reports/${encodeURIComponent(weekLabel)}/${encodeURIComponent(dept)}/submit`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token || ''}`,
+      },
+    });
+    return resp.json();
+  } catch (e) {
+    return { success: false, message: String(e) };
+  }
 }
 
 export function getReportsByWeek(weekLabel: string): WeeklyReport[] {
@@ -80,8 +237,9 @@ export function getCurrentUser(): User {
         name: matched?.name || loginUser.name,
         dept: loginUser.dept,
         role: loginUser.role,
-        avatar: matched?.avatar || 'https://api.dicebear.com/7.x/avataaars/svg?seed=' + loginUser.username,
+        avatar: matched?.avatar || genAvatar(loginUser.username, '#b6e3f4'),
         color: matched?.color || '#1890ff',
+        permissions: loginUser.permissions || [],
       };
     }
     const raw = localStorage.getItem('weekly-report-current-user');
@@ -94,9 +252,152 @@ export function setCurrentUser(user: User) {
   localStorage.setItem('weekly-report-current-user', JSON.stringify(user));
 }
 
+// ========== 本地草稿：防止刷新/退出登录导致未保存编辑丢失 ==========
+
+export interface WeeklyReportDraft {
+  userId: string;
+  weekLabel: string;
+  dept: string;
+  baseUpdatedAt?: string;
+  savedAt: number;
+  report: WeeklyReport;
+}
+
+function draftKey(userId: string, weekLabel: string, dept: string): string {
+  return `weekly-report-draft:${userId}:${weekLabel}:${dept}`;
+}
+
+/**
+ * 草稿中只保留用户编辑的核心字段，避免 comments/submissions/AI 结果等冗余数据造成写入卡顿。
+ */
+function stripDraftReport(report: WeeklyReport): WeeklyReport {
+  return {
+    ...report,
+    comments: [],
+    submissions: undefined,
+    aiSummary: undefined,
+    aiAnalysis: undefined,
+  };
+}
+
+export function loadDraft(userId: string, weekLabel: string, dept: string): WeeklyReportDraft | null {
+  try {
+    const raw = localStorage.getItem(draftKey(userId, weekLabel, dept));
+    if (!raw) return null;
+    const parsed: WeeklyReportDraft = JSON.parse(raw);
+    // 草稿不保存 comments/submissions，加载时重置为空，避免脏数据
+    parsed.report = {
+      ...parsed.report,
+      comments: [],
+      submissions: undefined,
+      aiSummary: undefined,
+      aiAnalysis: undefined,
+    };
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+export function saveDraft(draft: WeeklyReportDraft): void {
+  try {
+    localStorage.setItem(
+      draftKey(draft.userId, draft.weekLabel, draft.dept),
+      JSON.stringify({ ...draft, savedAt: Date.now(), report: stripDraftReport(draft.report) }),
+    );
+  } catch {
+    // localStorage 写失败（如空间不足）不阻断编辑流程
+  }
+}
+
+export function clearDraft(userId: string, weekLabel: string, dept: string): void {
+  try {
+    localStorage.removeItem(draftKey(userId, weekLabel, dept));
+  } catch {
+    // ignore
+  }
+}
+
+/**
+ * 将草稿中的用户编辑字段合并到当前报告，保留服务端元数据（id、updatedAt、comments 等）。
+ */
+export function applyDraftToReport(base: WeeklyReport, draft: WeeklyReport): WeeklyReport {
+  return {
+    ...base,
+    plan: draft.plan,
+    content: draft.content,
+    currentWork: draft.currentWork,
+    nextPlan: draft.nextPlan,
+    thoughts: draft.thoughts,
+    other: draft.other,
+  };
+}
+
+export function isSuperAdmin(user: User | undefined | null): boolean {
+  if (!user) return false;
+  // 33528 作为系统管理员兜底保护
+  return user.id === '33528';
+}
+
+// 管理员：可编辑任意部门任意周期周报，但不能管理用户/权限（除 33528 外）
+export function isAdmin(user: User | undefined | null): boolean {
+  if (!user) return false;
+  return user.role === 'admin' || user.role === 'superadmin';
+}
+
+// 总经理室领导：只能查看/评论/AI分析，不能编辑/提交/新建周报
+export function isLeader(user: User | undefined | null): boolean {
+  if (!user) return false;
+  return user.role === 'leader';
+}
+
+export function hasPermission(user: User | undefined | null, permission: string): boolean {
+  if (!user) return false;
+  if (isSuperAdmin(user)) return true;
+
+  // 所有人（登录后）都可以：查看任意周报、查看评论、添加评论、回复评论
+  const commonPerms = ['VIEW_REPORT', 'VIEW_COMMENTS', 'ADD_COMMENT', 'REPLY_COMMENT'];
+  if (commonPerms.includes(permission)) {
+    return true;
+  }
+
+  // 管理员：除 USER_MANAGE / PERMISSION_MANAGE 外全部权限
+  if (isAdmin(user)) {
+    return permission !== 'USER_MANAGE' && permission !== 'PERMISSION_MANAGE';
+  }
+
+  // 总经理室领导：查看/评论/AI分析/行为日志/知识库/提交记录等
+  if (isLeader(user)) {
+    const leaderPerms = [
+      'VIEW_REPORT', 'VIEW_COMMENTS', 'ADD_COMMENT', 'REPLY_COMMENT',
+      'AI_SUMMARY', 'AI_GLOBAL_ANALYSIS', 'VIEW_ACTION_LOGS',
+      'VIEW_SUBMISSIONS', 'KNOWLEDGE_BASE',
+    ];
+    return leaderPerms.includes(permission);
+  }
+
+  // 普通用户默认拥有 EDIT_REPORT / SUBMIT_REPORT
+  const userBasePerms = ['EDIT_REPORT', 'SUBMIT_REPORT'];
+  if (userBasePerms.includes(permission)) {
+    return true;
+  }
+
+  // 其他权限走用户自定义权限列表，并兼容旧权限名
+  const perms = user.permissions ?? [];
+  if (perms.includes(permission)) return true;
+  if (permission === 'EDIT_AFTER_DEADLINE' && perms.includes('SUBMIT_AFTER_DEADLINE')) return true;
+  return false;
+}
+
 export function canEditDept(user: User, dept: string): boolean {
-  if (user.role === 'admin') return false;
-  return user.dept === dept;
+  if (isSuperAdmin(user)) return true;
+  // 管理员可以编辑任意部门
+  if (isAdmin(user)) return true;
+  // 总经理室领导不能编辑任意周报
+  if (isLeader(user)) return false;
+  // 普通用户只能编辑自己部门
+  if (hasPermission(user, 'EDIT_REPORT') && user.dept === dept) return true;
+  return false;
 }
 
 export function canViewDept(_user: User, _dept: string): boolean {
@@ -124,42 +425,58 @@ export async function initDemoData() {
   }
 }
 
-function parseWeekLabel(label: string): { year: number; week: number } {
-  const [yearStr, weekStr] = label.split('-W');
-  return { year: parseInt(yearStr), week: parseInt(weekStr) };
+// ---------- 日期格式周标签工具 ----------
+
+export function parseDateLabel(label: string): Date | null {
+  if (!/^\d{8}$/.test(label)) return null;
+  const y = parseInt(label.slice(0, 4));
+  const m = parseInt(label.slice(4, 6)) - 1;
+  const d = parseInt(label.slice(6, 8));
+  const date = new Date(y, m, d);
+  if (isNaN(date.getTime())) return null;
+  return date;
 }
 
-function formatWeekLabelRaw(year: number, week: number): string {
-  return `${year}-W${String(week).padStart(2, '0')}`;
-}
-
-function getWeeksInYear(year: number): number {
-  const d = new Date(year, 11, 31);
-  const day = d.getDay() || 7;
-  const thu = new Date(d.getTime() + (4 - day) * 86400000);
-  const firstThu = new Date(year, 0, 4);
-  const firstMon = new Date(firstThu.getTime() - ((firstThu.getDay() || 7) - 1) * 86400000);
-  return Math.floor((+thu - +firstMon) / 604800000) + 1;
+export function formatDateLabelRaw(date: Date): string {
+  const yyyy = String(date.getFullYear());
+  const mm = String(date.getMonth() + 1).padStart(2, '0');
+  const dd = String(date.getDate()).padStart(2, '0');
+  return `${yyyy}${mm}${dd}`;
 }
 
 export function getPrevWeekLabel(weekLabel: string): string | undefined {
-  const { year, week } = parseWeekLabel(weekLabel);
-  if (week > 1) return formatWeekLabelRaw(year, week - 1);
-  const prevYear = year - 1;
-  return formatWeekLabelRaw(prevYear, getWeeksInYear(prevYear));
+  const d = parseDateLabel(weekLabel);
+  if (!d) return undefined;
+  d.setDate(d.getDate() - 7);
+  return formatDateLabelRaw(d);
 }
 
 export function getNextWeekLabel(weekLabel: string): string {
-  const { year, week } = parseWeekLabel(weekLabel);
-  const weeksInYear = getWeeksInYear(year);
-  if (week < weeksInYear) return formatWeekLabelRaw(year, week + 1);
-  return formatWeekLabelRaw(year + 1, 1);
+  const d = parseDateLabel(weekLabel);
+  if (!d) return weekLabel;
+  d.setDate(d.getDate() + 7);
+  return formatDateLabelRaw(d);
 }
 
 export function getPrevWeekReport(weekLabel: string, dept: string): WeeklyReport | undefined {
-  const prevWeek = getPrevWeekLabel(weekLabel);
-  if (!prevWeek) return undefined;
-  return getReport(prevWeek, dept);
+  // 向前查找最近一个有数据的周报（按日期最近，不按 7 天步长），最多回溯 90 天
+  const target = parseDateLabel(weekLabel);
+  if (!target) return undefined;
+
+  let result: WeeklyReport | undefined;
+  let resultDate: Date | undefined;
+
+  for (const r of _reports) {
+    if (r.dept !== dept) continue;
+    const d = parseDateLabel(r.weekLabel);
+    if (!d || d >= target) continue;
+    if (!resultDate || d > resultDate) {
+      result = r;
+      resultDate = d;
+    }
+  }
+
+  return result;
 }
 
 // ---------- 树形任务解析与操作工具 ----------
@@ -298,52 +615,367 @@ export function parsePlanToTasks(planText: string): TaskItem[] {
   return parsePlanToTree(planText);
 }
 
-export const WEEK_OPTIONS = ['2026-W12', '2026-W14', '2026-W15', '2026-W19', '2026-W20'];
-export const DEFAULT_WEEK = '2026-W20';
+/**
+ * 从字符串中提取第一个完整的 JSON 数组。
+ * 用于处理 nextPlan 被污染的情况（末尾追加了非 JSON 文本）。
+ */
+function extractFirstJsonArray(text: string): string | null {
+  const trimmed = text.trim();
+  if (!trimmed.startsWith('[')) return null;
+
+  let depth = 0;
+  let inString = false;
+  let escape = false;
+  for (let i = 0; i < trimmed.length; i++) {
+    const ch = trimmed[i];
+    if (escape) {
+      escape = false;
+      continue;
+    }
+    if (ch === '\\') {
+      escape = true;
+      continue;
+    }
+    if (ch === '"') {
+      inString = !inString;
+      continue;
+    }
+    if (inString) continue;
+    if (ch === '[') depth++;
+    else if (ch === ']') {
+      depth--;
+      if (depth === 0) {
+        return trimmed.substring(0, i + 1);
+      }
+    }
+  }
+  return null;
+}
+
+/** 解析下周工作计划：优先尝试 JSON 格式（新 UI），失败则回退到文本解析（旧格式） */
+export function parseNextPlan(nextPlan: string | undefined): TaskItem[] {
+  if (!nextPlan) return [];
+  const trimmed = nextPlan.trim();
+  if (trimmed.startsWith('[')) {
+    try {
+      const parsed = JSON.parse(trimmed);
+      if (Array.isArray(parsed)) return parsed;
+    } catch {
+      // 直接解析失败，可能是末尾被非 JSON 文本污染，尝试提取第一个合法 JSON 数组
+      const extracted = extractFirstJsonArray(trimmed);
+      if (extracted) {
+        try {
+          const parsed = JSON.parse(extracted);
+          if (Array.isArray(parsed)) return parsed;
+        } catch { /* 提取后仍失败则回退 */ }
+      }
+    }
+  }
+  return parsePlanToTree(trimmed);
+}
+
+/** 递归格式化单个任务节点为文本（带层级缩进和序号） */
+export function formatTaskNodeForExport(node: TaskItem, depth: number, index: number): string {
+  const indent = '  '.repeat(depth);
+  let prefix: string;
+  if (depth === 0) {
+    prefix = `${index + 1}. `;
+  } else if (depth === 1) {
+    prefix = `（${index + 1}）`;
+  } else {
+    prefix = `${index + 1}）`;
+  }
+
+  let text = node.text || '';
+  // 兼容旧数据：如果 text 里已经带了类似 "1. "、"（1）" 的前缀，先剥离
+  text = text.replace(/^(\d+[、.．）])+\s*/, '').replace(/^[（(]\d+[）)]\s*/, '').replace(/^\d+[）)]\s*/, '');
+
+  let lines = [`${indent}${prefix}${text}`];
+  if (node.children && node.children.length > 0) {
+    lines = lines.concat(node.children.map((child, i) => formatTaskNodeForExport(child, depth + 1, i)));
+  }
+  return lines.join('\n');
+}
+
+/**
+ * 将任务树格式化为导出文本，按「重点工作 / 常规工作」分组
+ */
+export function formatTasksForExport(tasks: TaskItem[]): string {
+  if (!tasks || tasks.length === 0) return '';
+
+  const importantTasks = tasks.filter(t => t.highlighted);
+  const normalTasks = tasks.filter(t => !t.highlighted);
+  const sections: string[] = [];
+
+  if (importantTasks.length > 0) {
+    sections.push('重点工作：');
+    sections.push(...importantTasks.map((t, i) => formatTaskNodeForExport(t, 0, i)));
+  }
+
+  if (normalTasks.length > 0) {
+    if (sections.length > 0) sections.push('');
+    sections.push('常规工作：');
+    sections.push(...normalTasks.map((t, i) => formatTaskNodeForExport(t, 0, i)));
+  }
+
+  return sections.join('\n');
+}
+
+export const WEEK_OPTIONS = ['20260327', '20260410', '20260417', '20260424', '20260515', '20260518', '20260522', '20260525', '20260529'];
+
+/**
+ * 获取今天所在周的周五日期（当前周基准）
+ * 周一~周五：返回本周五；周六~周日：返回下周五
+ */
+export function getCurrentFridayWeekLabel(): string {
+  const now = new Date();
+  const day = now.getDay() || 7; // Mon=1 ... Sun=7
+  const offset = (5 - day + 7) % 7; // 距离本周五还有几天
+  const friday = new Date(now);
+  friday.setDate(now.getDate() + offset);
+  return formatDateLabelRaw(friday);
+}
+
+export const DEFAULT_WEEK = getCurrentFridayWeekLabel();
 
 export function getDynamicWeekOptions(): string[] {
   const existing = _reports.map(r => r.weekLabel);
-  const baseSet = new Set([...WEEK_OPTIONS, ...existing]);
+  const currentWeek = getCurrentFridayWeekLabel();
+  const allWeeks = new Set(existing);
+  // 确保当前周始终出现在下拉框中（即使没有数据，用户也应能查看当前周）
+  allWeeks.add(currentWeek);
+  // 回收站（软删除）中的周期不显示——包括当前周被超管删除的情况
+  for (const w of _deletedWeeks) allWeeks.delete(w);
+  return [...allWeeks].sort((a, b) => b.localeCompare(a));
+}
 
-  const allKnown = Array.from(baseSet);
-  const sorted = allKnown.sort((a, b) => {
-    const pa = parseWeekLabel(a);
-    const pb = parseWeekLabel(b);
-    if (pa.year !== pb.year) return pa.year - pb.year;
-    return pa.week - pb.week;
-  });
+/**
+ * Globally create reports for all departments for a target week.
+ * Returns the target week label and list of created/updated depts.
+ *
+ * @param currentUser 当前操作人
+ * @param targetWeekLabel 目标周报周期，如 20260702
+ * @param deadline 自定义截止时间，ISO 8601 字符串（如 2026-07-02T20:00:00）
+ */
+export function createNextWeekGlobally(
+  currentUser: User,
+  targetWeekLabel?: string,
+  deadline?: string
+): { nextWeek: string; createdDepts: string[]; inRecycleBin?: boolean } {
+  // 默认基于「今天所在周的周五」创建下一周
+  const nextWeek = targetWeekLabel || getNextWeekLabel(getCurrentFridayWeekLabel());
 
-  let max = sorted[sorted.length - 1] || DEFAULT_WEEK;
-  for (let i = 0; i < 8; i++) {
-    max = getNextWeekLabel(max);
-    baseSet.add(max);
+  // 同标签周期在回收站中：不允许重建（后端会拒绝写入），应走回收站一键恢复
+  if (_deletedWeeks.has(nextWeek)) {
+    return { nextWeek, createdDepts: [], inRecycleBin: true };
   }
 
-  return Array.from(baseSet).sort((a, b) => {
-    const pa = parseWeekLabel(a);
-    const pb = parseWeekLabel(b);
-    if (pa.year !== pb.year) return pa.year - pb.year;
-    return pa.week - pb.week;
-  });
+  const createdDepts: string[] = [];
+
+  for (const dept of DEPTS) {
+    const existing = getReport(nextWeek, dept);
+    if (existing) continue;
+
+    const prevReport = getPrevWeekReport(nextWeek, dept);
+    const defaultTasks = prevReport ? parseNextPlan(prevReport.nextPlan) : [];
+    const newReport: WeeklyReport = {
+      id: genId(),
+      weekLabel: nextWeek,
+      dept,
+      // 继承上周作者，避免管理员创建下周时把 author 改成自己
+      authorId: prevReport ? prevReport.authorId : currentUser.id,
+      authorName: prevReport ? prevReport.authorName : currentUser.name,
+      plan: prevReport ? prevReport.nextPlan : '',
+      content: defaultTasks,
+      currentWork: prevReport ? prevReport.nextPlan : '',
+      nextPlan: '',
+      thoughts: '',
+      other: '',
+      comments: [],
+      deadline,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+
+    // 直接更新本地缓存并强制推送到后端（绕过 saveReport 的空数据过滤）
+    const idx = _reports.findIndex(r => r.weekLabel === nextWeek && r.dept === dept);
+    if (idx >= 0) {
+      _reports[idx] = newReport;
+    } else {
+      _reports.push(newReport);
+    }
+    pushReport(newReport).catch(console.error);
+    createdDepts.push(dept);
+  }
+
+  return { nextWeek, createdDepts };
 }
 
 export function formatWeekLabel(weekLabel: string): string {
-  const [, weekStr] = weekLabel.split('-W');
-  const weekNum = parseInt(weekStr);
-  const baseWeek = 20;
-  const baseDate = new Date(2026, 4, 22);
-
-  const diffWeeks = weekNum - baseWeek;
-  const targetFri = new Date(baseDate);
-  targetFri.setDate(baseDate.getDate() + diffWeeks * 7);
-
-  const yyyy = String(targetFri.getFullYear());
-  const mm = String(targetFri.getMonth() + 1).padStart(2, '0');
-  const dd = String(targetFri.getDate()).padStart(2, '0');
-  return `${yyyy}${mm}${dd}-W${weekNum}`;
+  // 格式化为 YYYY-MM-DD，如 2026-04-10
+  if (!/^\d{8}$/.test(weekLabel)) return weekLabel;
+  return `${weekLabel.slice(0, 4)}-${weekLabel.slice(4, 6)}-${weekLabel.slice(6, 8)}`;
 }
 
 export async function clearAllData() {
-  await fetch(`${API_BASE}/reports`, { method: 'DELETE' });
-  _reports = [];
+  await fetch(`${getApiBaseUrl()}/reports`, { method: 'DELETE' });
+  // 历史周报始终保留在前端
+  _reports = [...FROZEN_REPORTS];
+  _deletedWeeks = new Set();
+}
+
+export async function deleteWeekReports(weekLabel: string): Promise<{ success: boolean; message?: string; deleted?: number }> {
+  if (isFrozenWeek(weekLabel)) {
+    return { success: false, message: `历史周报 ${weekLabel} 已固化，不可删除` };
+  }
+  const resp = await fetch(`${getApiBaseUrl()}/reports/${encodeURIComponent(weekLabel)}`, {
+    method: 'DELETE',
+    headers: { 'Cache-Control': 'no-cache', ...(await getAuthHeaders()) },
+  });
+  if (!resp.ok) {
+    const text = await resp.text();
+    throw new Error(`删除失败 ${resp.status}: ${text}`);
+  }
+  const result = await resp.json();
+  if (result.success) {
+    _reports = _reports.filter(r => r.weekLabel !== weekLabel);
+    // 软删除：周期进入回收站，从下拉框排除（含当前周）
+    _deletedWeeks = new Set([..._deletedWeeks, weekLabel]);
+  }
+  return result;
+}
+
+// ========== 回收站（软删除周期） API ==========
+
+export interface RecycleBinItem {
+  weekLabel: string;
+  reportCount: number;
+  deletedAt: string;
+  deletedBy: string;
+}
+
+/** 获取回收站列表（仅超级管理员） */
+export async function fetchRecycleBin(): Promise<RecycleBinItem[]> {
+  const resp = await fetch(`${getApiBaseUrl()}/reports/recycle-bin`, {
+    headers: { 'Cache-Control': 'no-cache', ...(await getAuthHeaders()) },
+  });
+  if (!resp.ok) throw new Error(`获取回收站失败 ${resp.status}`);
+  const result = await resp.json();
+  if (Array.isArray(result)) return result;
+  throw new Error(result.message || '获取回收站失败');
+}
+
+/** 一键恢复：将周期从回收站还原到周报周期下拉框（仅超级管理员） */
+export async function restoreWeekReports(weekLabel: string): Promise<{ success: boolean; message?: string }> {
+  const resp = await fetch(`${getApiBaseUrl()}/reports/${encodeURIComponent(weekLabel)}/restore`, {
+    method: 'POST',
+    headers: { 'Cache-Control': 'no-cache', ...(await getAuthHeaders()) },
+  });
+  if (!resp.ok) {
+    const text = await resp.text();
+    throw new Error(`恢复失败 ${resp.status}: ${text}`);
+  }
+  const result = await resp.json();
+  if (result.success) {
+    _deletedWeeks = new Set([..._deletedWeeks].filter(w => w !== weekLabel));
+    // 恢复的周报行需重新拉取，才能回到内存缓存和下拉框
+    await loadReports();
+  }
+  return result;
+}
+
+// ========== Comment API (独立批注接口) ==========
+
+async function getAuthHeaders(): Promise<Record<string, string>> {
+  const token = localStorage.getItem('auth-token');
+  return {
+    'Content-Type': 'application/json',
+    'Authorization': `Bearer ${token || ''}`,
+  };
+}
+
+export async function fetchComments(weekLabel: string, dept: string): Promise<Comment[]> {
+  const resp = await fetch(`${getApiBaseUrl()}/reports/${encodeURIComponent(weekLabel)}/${encodeURIComponent(dept)}/comments`, {
+    headers: { 'Cache-Control': 'no-cache', ...(await getAuthHeaders()) },
+  });
+  if (!resp.ok) throw new Error(`获取批注失败 ${resp.status}`);
+  return resp.json();
+}
+
+export async function addCommentApi(weekLabel: string, dept: string, comment: any): Promise<void> {
+  const resp = await fetch(`${getApiBaseUrl()}/reports/${encodeURIComponent(weekLabel)}/${encodeURIComponent(dept)}/comments`, {
+    method: 'POST',
+    headers: await getAuthHeaders(),
+    body: JSON.stringify(comment),
+  });
+  if (!resp.ok) {
+    const text = await resp.text();
+    throw new Error(`添加批注失败 ${resp.status}: ${text}`);
+  }
+  const result = await resp.json();
+  if (result.success === false) {
+    throw new Error(result.message || '添加批注被拒绝');
+  }
+}
+
+export async function addReplyApi(weekLabel: string, dept: string, parentId: string, reply: any): Promise<void> {
+  const resp = await fetch(`${getApiBaseUrl()}/reports/${encodeURIComponent(weekLabel)}/${encodeURIComponent(dept)}/comments/${encodeURIComponent(parentId)}/replies`, {
+    method: 'POST',
+    headers: await getAuthHeaders(),
+    body: JSON.stringify(reply),
+  });
+  if (!resp.ok) {
+    const text = await resp.text();
+    throw new Error(`添加回复失败 ${resp.status}: ${text}`);
+  }
+  const result = await resp.json();
+  if (result.success === false) {
+    throw new Error(result.message || '添加回复被拒绝');
+  }
+}
+
+export async function deleteCommentApi(weekLabel: string, dept: string, commentId: string): Promise<void> {
+  const resp = await fetch(`${getApiBaseUrl()}/reports/${encodeURIComponent(weekLabel)}/${encodeURIComponent(dept)}/comments/${encodeURIComponent(commentId)}`, {
+    method: 'DELETE',
+    headers: await getAuthHeaders(),
+  });
+  if (!resp.ok) {
+    const text = await resp.text();
+    throw new Error(`删除批注失败 ${resp.status}: ${text}`);
+  }
+  const result = await resp.json();
+  if (result.success === false) {
+    throw new Error(result.message || '删除批注被拒绝');
+  }
+}
+
+export async function deleteReplyApi(weekLabel: string, dept: string, commentId: string, replyId: string): Promise<void> {
+  const resp = await fetch(`${getApiBaseUrl()}/reports/${encodeURIComponent(weekLabel)}/${encodeURIComponent(dept)}/comments/${encodeURIComponent(commentId)}/replies/${encodeURIComponent(replyId)}`, {
+    method: 'DELETE',
+    headers: await getAuthHeaders(),
+  });
+  if (!resp.ok) {
+    const text = await resp.text();
+    throw new Error(`删除回复失败 ${resp.status}: ${text}`);
+  }
+  const result = await resp.json();
+  if (result.success === false) {
+    throw new Error(result.message || '删除回复被拒绝');
+  }
+}
+
+export async function toggleResolvedApi(weekLabel: string, dept: string, commentId: string, resolved: boolean): Promise<void> {
+  const resp = await fetch(`${getApiBaseUrl()}/reports/${encodeURIComponent(weekLabel)}/${encodeURIComponent(dept)}/comments/${encodeURIComponent(commentId)}/resolve`, {
+    method: 'PUT',
+    headers: await getAuthHeaders(),
+    body: JSON.stringify({ resolved }),
+  });
+  if (!resp.ok) {
+    const text = await resp.text();
+    throw new Error(`更新状态失败 ${resp.status}: ${text}`);
+  }
+  const result = await resp.json();
+  if (result.success === false) {
+    throw new Error(result.message || '更新状态被拒绝');
+  }
 }
