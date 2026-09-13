@@ -1,0 +1,62 @@
+# 模块：周报管理 v2（weekly-report-v2）
+
+> 状态：✅ 稳定
+> 最近更新：2026-09-13
+
+## 摘要
+
+系统核心模块。多科室按周填报工作进展：左中右三栏主界面（科室切换 / 任务树编辑 / 批注与 AI 总结），支持 Excel 导入、多人协作合并、评论 @ / 划词批注、提交流转（submit/unlock/lock）、周期新建与删除（软删除进回收站可恢复）、AI 总结 / 文本解析 / 全局分析，另有汇报演示视图。
+
+## 范围与非范围
+
+- 范围内：周报的创建、编辑、协作、提交、周期管理、AI 辅助
+- 明确不做：知识库聚合导出（属 knowledge-base 模块）、提交管理/回收站页面（属 admin 模块，本模块只提供入口）
+
+## 上下游依赖
+
+- 上游：后端 `ReportController` `/api/reports/**`、`CommentController` `/api/reports/{week}/{dept}/comments`、`AiController` `/api/ai/**`
+- 下游：knowledge-base（读取历史周报聚合）、PresentationView（同源数据演示）
+
+## 关键接口与运行时信息
+
+- 关键文件：
+  - `src/components/weekly-report-v2/WeeklyReportV2.tsx` — 主界面（3500+ 行，路由 `/` 和 `/weekly-report-v2`）
+  - `src/components/weekly-report-v2/data.ts` — 数据层，**所有 API 调用集中在此**（`_reports` 内存缓存 + REST）
+  - `src/components/weekly-report-v2/types.ts` — 角色/权限/部门/用户定义
+  - `PresentationView.tsx` — 演示视图（路由 `/presentation`）
+- 周期下拉框：选项来自 `getDynamicWeekOptions()`（`_reports` 的 weekLabel ∪ 当前周五 − 回收站），倒序排列；顶栏 Select 用**原生虚拟滚动 + `optionRender` 定制行内容**（日期 + 删除图标），`showSearch` + `filterWeekOption` 同时匹配 `YYYY-MM-DD` 和 `YYYYMMDD`
+- 周期删除规则（`canDeleteWeek`）：固化历史周不可删；超管任意删；其他管理员仅能删**当前周之后**的未来周（需 `DELETE_WEEK` 权限）
+- 如何验证：本地前端 5173 + 后端 8080 起服务后，`cd e2e && npx playwright test`（必须 workers=1 串行，共享本地 SQLite）
+
+## 设计决策与假设
+
+- 2026-09-13 起，顶栏周期下拉从自定义 `dropdownRender` 改回 antd 原生渲染 + `optionRender`：自定义 `dropdownRender` 会使 rc-virtual-list 虚拟滚动失效（全量渲染所有周期 DOM），原生模式只渲染可视区约 10 行，滚动时按需创建。删除按钮、选中态等定制内容经 `optionRender` 注入，行为不变。
+- e2e 中定位周期选项一律走**搜索过滤**（`fixtures.ts selectWeek`），不依赖 DOM 全量存在——虚拟列表未渲染的项无法直接点击。
+
+## Bug 与问题记录
+
+### 科室清单动态化（2026-09-13，配合新模块 department-management）
+- 周报模块不再直接读 `types.ts` 的 `DEPTS`/`SORTED_DEPTS`（保留为 fallback），统一走 `src/services/deptStore.ts`：组件用 `useDepts()`，非组件代码（`createNextWeekGlobally`、导入科室匹配）用 `getDeptsSnapshot()`
+- 关键坑：URL `dept` 深链接校验必须等动态清单加载完成（见 department-management 模块文档「首屏时序」）
+
+### BUG-001 周期下拉全量渲染导致卡顿（2026-09-13，已解决）
+- 错误行为：WHEN 周报周期增多后点开顶栏「周报周期」下拉 THEN 页面卡顿（所有周期一次性渲染为 DOM）
+- 期望行为：WHEN 点开周期下拉 THEN 系统 SHALL 只渲染可视区选项，滚动流畅，且支持输入过滤定位周期
+- 不可破坏的行为：WHEN 删除/恢复周期 THEN 系统 SHALL CONTINUE TO 走既有回收站联动（`handleDeleteWeekClick`/`canDeleteWeek`/回收站恢复后周期回到下拉框）；删除入口 ✕ 图标 SHALL CONTINUE TO 只对可删周期显示
+- 根因：顶栏 Select 用自定义 `dropdownRender` 手写 `weekOptions.map` 全量渲染，绕过了 antd 原生选项列表的 rc-virtual-list 虚拟滚动
+- 解决方式：`WeeklyReportV2.tsx` 顶栏 Select 删除 `dropdownRender`，改用原生 `options` + `optionRender` 渲染行内容，加 `showSearch` + `filterWeekOption`（同时匹配 `2026-07-02` 和 `20260702`）；options 数组 `useMemo` 缓存；`styles.css` 中 `.custom-week-dropdown/.custom-week-option` 样式删除，新增 `.week-option-row/.week-option-delete`；e2e 的 `selectWeek` 与 02/06 用例改为搜索过滤定位
+- 验证方式：`npx tsc --noEmit`、`vite build` 通过；`e2e` 02（周下拉）与 06（周期管理与回收站）全绿；全量 e2e 中所有 `selectWeek` 调用方（03/04/05/09/10）通过
+
+## 已知限制与待办
+
+- [ ] e2e 07（提交）与 11（回收站 URL 跳转）存在**与本次改动无关的既有失败**，疑似测试周期 `TEST_WEEK=20260904` 已变成过去周导致的时间敏感问题（06 已修复为动态未来周 `futureFridayLabel`，07/11 未跟进）
+- [ ] 主界面单文件 3500+ 行，后续可拆分子组件
+
+| 2026-09-13 | 科室清单动态化：DEPTS 改走 deptStore（[见 department-management](department-management.md)） | — |
+
+## 变更历史
+
+| 日期 | 变更 | 关联需求 / bug |
+|---|---|---|
+| 2026-09-13 | 科室清单动态化，URL dept 深链接等清单加载 | 新需求：科室管理 |
+| 2026-09-13 | 周期下拉改原生虚拟滚动 + optionRender + 搜索；e2e 02/06/fixtures 适配 | BUG-001 |
