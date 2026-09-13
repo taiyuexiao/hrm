@@ -73,6 +73,24 @@ public class DailyDao {
                 PRIMARY KEY (report_id, username)
             )
             """);
+        jdbcTemplate.execute("""
+            CREATE TABLE IF NOT EXISTS mentor_reports (
+                id TEXT PRIMARY KEY,
+                mentor TEXT NOT NULL,
+                scope TEXT NOT NULL,
+                target TEXT NOT NULL,
+                report_type TEXT NOT NULL,
+                period TEXT NOT NULL,
+                sections TEXT NOT NULL DEFAULT '{}',
+                status TEXT NOT NULL DEFAULT 'draft',
+                submitted_at TEXT,
+                version INTEGER NOT NULL DEFAULT 1,
+                deleted INTEGER NOT NULL DEFAULT 0,
+                created_at TEXT,
+                updated_at TEXT,
+                UNIQUE(mentor, scope, target, report_type, period)
+            )
+            """);
     }
 
     // ========== 小组 ==========
@@ -176,6 +194,97 @@ public class DailyDao {
                 "SELECT period FROM newbie_reports WHERE username = ? AND report_type = ? AND status = 'submitted' AND deleted = 0",
                 String.class, username, reportType);
         return new HashSet<>(rows);
+    }
+
+    // ========== mentor 带教报告 ==========
+
+    public Map<String, Object> findMentorReport(String mentor, String scope, String target, String reportType, String period) {
+        try {
+            return jdbcTemplate.queryForObject(
+                    "SELECT * FROM mentor_reports WHERE mentor = ? AND scope = ? AND target = ? AND report_type = ? AND period = ? AND deleted = 0",
+                    this::mapMentorReport, mentor, scope, target, reportType, period);
+        } catch (EmptyResultDataAccessException e) {
+            return null;
+        }
+    }
+
+    public Map<String, Object> findMentorReportById(String id) {
+        try {
+            return jdbcTemplate.queryForObject(
+                    "SELECT * FROM mentor_reports WHERE id = ? AND deleted = 0",
+                    this::mapMentorReport, id);
+        } catch (EmptyResultDataAccessException e) {
+            return null;
+        }
+    }
+
+    /** 通用报告查找：新人报告与 mentor 报告统一入口（评论/已读/AI 共用，UUID 跨表唯一） */
+    public Map<String, Object> findAnyReport(String id) {
+        Map<String, Object> r = findReportById(id);
+        return r != null ? r : findMentorReportById(id);
+    }
+
+    public String upsertMentorDraft(String mentor, String scope, String target, String reportType, String period, String sectionsJson) {
+        Map<String, Object> existing = findMentorReport(mentor, scope, target, reportType, period);
+        String now = Instant.now().toString();
+        if (existing == null) {
+            String id = UUID.randomUUID().toString().replace("-", "");
+            jdbcTemplate.update("""
+                INSERT INTO mentor_reports (id, mentor, scope, target, report_type, period, sections, status, version, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, 'draft', 1, ?, ?)
+                """, id, mentor, scope, target, reportType, period, sectionsJson, now, now);
+            return id;
+        }
+        jdbcTemplate.update(
+                "UPDATE mentor_reports SET sections = ?, version = version + 1, updated_at = ? WHERE id = ?",
+                sectionsJson, now, existing.get("id"));
+        return (String) existing.get("id");
+    }
+
+    public boolean submitMentorReport(String id, String mentor) {
+        int n = jdbcTemplate.update(
+                "UPDATE mentor_reports SET status = 'submitted', submitted_at = ?, updated_at = ? WHERE id = ? AND mentor = ? AND deleted = 0",
+                Instant.now().toString(), Instant.now().toString(), id, mentor);
+        return n > 0;
+    }
+
+    /** 某周期全部 mentor 报告（浏览页/读全开） */
+    public List<Map<String, Object>> findMentorReportsByPeriod(String reportType, String period) {
+        return jdbcTemplate.query(
+                "SELECT * FROM mentor_reports WHERE report_type = ? AND period = ? AND deleted = 0 ORDER BY mentor, scope, target",
+                this::mapMentorReport, reportType, period);
+    }
+
+    /** 周期区间内的 mentor 报告（看板数据源，原始行） */
+    public List<Map<String, Object>> findMentorReportsInRange(String reportType, String from, String to) {
+        return jdbcTemplate.query(
+                "SELECT * FROM mentor_reports WHERE report_type = ? AND period >= ? AND period <= ? AND deleted = 0 ORDER BY period",
+                this::mapMentorReport, reportType, from, to);
+    }
+
+    /** mentor 某类报告已提交的 period 集合（补交提醒） */
+    public Set<String> findSubmittedMentorPeriods(String mentor, String scope, String reportType) {
+        List<String> rows = jdbcTemplate.queryForList(
+                "SELECT DISTINCT period FROM mentor_reports WHERE mentor = ? AND scope = ? AND report_type = ? AND status = 'submitted' AND deleted = 0",
+                String.class, mentor, scope, reportType);
+        return new HashSet<>(rows);
+    }
+
+    private Map<String, Object> mapMentorReport(java.sql.ResultSet rs, int n) throws java.sql.SQLException {
+        Map<String, Object> m = new LinkedHashMap<>();
+        m.put("id", rs.getString("id"));
+        m.put("mentor", rs.getString("mentor"));
+        m.put("scope", rs.getString("scope"));
+        m.put("target", rs.getString("target"));
+        m.put("reportType", rs.getString("report_type"));
+        m.put("period", rs.getString("period"));
+        m.put("sections", parseJsonObject(rs.getString("sections")));
+        m.put("status", rs.getString("status"));
+        m.put("submittedAt", rs.getString("submitted_at"));
+        m.put("version", rs.getInt("version"));
+        m.put("createdAt", rs.getString("created_at"));
+        m.put("updatedAt", rs.getString("updated_at"));
+        return m;
     }
 
     // ========== 评论 ==========

@@ -56,6 +56,7 @@
 |---|---|---|---|
 | 2026-09-13 | 新增 | 新人培养报告模块第一期：daily 角色 + daily_role/group_id/mentor 账号字段、`/api/daily/**`（4 张新表）、日报填报（解析填入/自动保存/提交）、浏览批注/回复/已读/通知、双系统登录选择页与侧边栏入口、账号管理支持 daily 账号与小组管理；e2e 13 新增，全量 24/24（[文档](modules/new-employee-daily.md)） | 新人培养报告、用户与权限管理 |
 | 2026-09-13 | 新增 | 新人日报第二期：点阵看板（`/daily/dashboard`，月视图绿/黄/灰圆点+点击跳浏览）+ 补交提醒（`/daily/missing`，登录横幅跳最早缺交日）；修复看板跳浏览竞态（[BUG-002](modules/new-employee-daily.md#bug-002-看板跳浏览显示尚未填写2026-09-13已解决)）；e2e 14 新增，全量 26/26 | 新人培养报告 |
+| 2026-09-13 | 新增 | 新人日报第三期：新人周/月报、mentor 小组/个人带教报告（mentor_reports 表 + 两套模板 + 对象强校验）、AI 总结/完成度（复用 LlmService）、看板带教提交区块、划词批注、mentor 补交提醒；e2e 15 新增，全量 29/29（[文档](modules/new-employee-daily.md)） | 新人培养报告 |
 | 2026-09-13 | 修复 | 授权去工号硬编码：isSuperAdmin 改角色判断、管理端点按 USER_MANAGE/PERMISSION_MANAGE 权限码；e2e 超管账号改环境变量（[BUG-002](modules/user-permission-admin.md#bug-002-superadmin-角色账号被拒于管理功能之外2026-09-13已解决)） | 用户与权限管理、科室管理 |
 | 2026-09-13 | 修复 | e2e 07/11 测试周期改动态未来周（与 06 一致），消除写死 `20260904` 过期的既有失败；全量回归 22/22 通过 | 数据处理脚本（e2e） |
 | 2026-09-13 | 新增 | 科室管理：departments 字典表 + `/api/depts` + 前端 deptStore 动态化（替换全部 DEPTS 引用点）+ 账号管理页新增科室/改派科室；e2e 12 新增（[文档](modules/department-management.md)） | 科室管理、周报管理 v2 |

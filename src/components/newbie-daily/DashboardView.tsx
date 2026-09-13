@@ -1,20 +1,23 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { DatePicker, Segmented, Spin, message } from 'antd';
 import dayjs, { Dayjs } from 'dayjs';
-import { dailyApi, toPeriod, DashboardEntry } from '../../services/dailyApi';
+import {
+  dailyApi, toPeriod, monthPeriod, DashboardEntry, DashboardMentorItem, DailyMeta,
+} from '../../services/dailyApi';
+import { BrowseTarget } from './BrowseView';
 
 /**
  * 提交管理看板（点阵图）：行=新人（按小组分组），列=当月工作日。
  * 状态判定在前端：绿=当天提交，黄=补交（提交日晚于报告日），灰=缺交，空=未到期/非工作日。
- * mentor / 日报领导 / 超管可见。
+ * mentor / 日报领导 / 超管可见。下方为带教报告提交区块（周/月报）。
  */
 
-type CellState = 'ontime' | 'late' | 'missing' | 'future' | 'none';
+type CellState = 'ontime' | 'late' | 'missing' | 'future' | 'none' | 'draft';
 
 interface DashboardViewProps {
-  /** 点击圆点跳转：打开浏览页并选中该新人该周期 */
-  onOpenReport: (username: string, period: string) => void;
-  meta: import('../../services/dailyApi').DailyMeta | null;
+  /** 点击圆点跳转：打开浏览页并选中目标报告 */
+  onOpenReport: (target: BrowseTarget) => void;
+  meta: DailyMeta | null;
 }
 
 const CELL_COLOR: Record<CellState, string> = {
@@ -23,6 +26,7 @@ const CELL_COLOR: Record<CellState, string> = {
   missing: '#e5e6eb',
   future: 'transparent',
   none: 'transparent',
+  draft: '#91caff',
 };
 
 function workdaysOfMonth(month: Dayjs, today: Dayjs): Dayjs[] {
@@ -40,8 +44,10 @@ const DashboardView: React.FC<DashboardViewProps> = ({ onOpenReport, meta }) => 
   const [month, setMonth] = useState<Dayjs>(dayjs());
   const [groupFilter, setGroupFilter] = useState<string>('all');
   const [entries, setEntries] = useState<DashboardEntry[]>([]);
+  const [mentorReports, setMentorReports] = useState<DashboardMentorItem[]>([]);
   const [loading, setLoading] = useState(false);
   const today = dayjs();
+  const todayPeriod = toPeriod(today.toDate());
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -51,6 +57,7 @@ const DashboardView: React.FC<DashboardViewProps> = ({ onOpenReport, meta }) => 
       const res = await dailyApi.dashboard(from, to);
       if (res.success) {
         setEntries(res.entries);
+        setMentorReports(res.mentorReports || []);
       } else {
         message.error(res.message || '加载看板失败');
       }
@@ -65,7 +72,6 @@ const DashboardView: React.FC<DashboardViewProps> = ({ onOpenReport, meta }) => 
   useEffect(() => { load(); }, [load]);
 
   const days = useMemo(() => workdaysOfMonth(month, today), [month, today]);
-  const todayPeriod = toPeriod(today.toDate());
 
   const visible = useMemo(
     () => (groupFilter === 'all' ? entries : entries.filter(e => e.groupId === groupFilter)),
@@ -119,6 +125,49 @@ const DashboardView: React.FC<DashboardViewProps> = ({ onOpenReport, meta }) => 
     meta?.groups.forEach(g => opts.push({ label: g.name, value: g.id }));
     return opts;
   }, [meta]);
+
+  // ===== 带教报告提交区块（周/月报） =====
+  const fridays = useMemo(() => days.filter(d => d.day() === 5), [days]);
+  const monthPeriodValue = monthPeriod(month.toDate());
+  const currentMonthPeriod = monthPeriod(today.toDate());
+  const latestFriday = fridays.length > 0 ? toPeriod(fridays[fridays.length - 1].toDate()) : null;
+
+  const mentorCellOf = (mentorUsername: string, type: 'weekly' | 'monthly', period: string) => {
+    const r = mentorReports.find(
+      m => m.mentor === mentorUsername && m.reportType === type && m.scope === 'group' && m.period === period,
+    );
+    if (r?.status === 'submitted' && r.submittedAt) {
+      const submitDay = r.submittedAt.slice(0, 10).replace(/-/g, '');
+      return { state: (submitDay <= period ? 'ontime' : 'late') as CellState, report: r };
+    }
+    if (r) return { state: 'draft' as CellState, report: r };
+    const due = type === 'weekly' ? period < todayPeriod : period < currentMonthPeriod;
+    return { state: (due ? 'missing' : 'future') as CellState, report: null };
+  };
+
+  const personCount = (mentorUsername: string) => {
+    const total = (meta?.newbies || []).filter(n => n.mentor === mentorUsername).length;
+    const done = latestFriday
+      ? mentorReports.filter(
+          m => m.mentor === mentorUsername && m.scope === 'person'
+            && m.reportType === 'weekly' && m.period === latestFriday && m.status === 'submitted',
+        ).length
+      : 0;
+    return { done, total };
+  };
+
+  const mentorDot = (state: CellState, title: string, onClick?: () => void) => (
+    <span
+      title={title}
+      onClick={onClick}
+      style={{
+        display: 'inline-block', width: 16, height: 16, borderRadius: '50%',
+        background: CELL_COLOR[state],
+        border: state === 'missing' ? '2px solid #dcdee5' : 'none',
+        cursor: onClick ? 'pointer' : 'default',
+      }}
+    />
+  );
 
   const statCard = (icon: string, value: React.ReactNode, label: string, bg: string) => (
     <div style={{
@@ -198,7 +247,7 @@ const DashboardView: React.FC<DashboardViewProps> = ({ onOpenReport, meta }) => 
                             {state !== 'future' && (
                               <span
                                 title={`${e.name} ${period}：${state === 'ontime' ? '已交' : state === 'late' ? '补交' : '缺交'}`}
-                                onClick={() => clickable && onOpenReport(e.username, period)}
+                                onClick={() => clickable && onOpenReport({ kind: 'daily', username: e.username, period })}
                                 style={{
                                   display: 'inline-block', width: 16, height: 16, borderRadius: '50%',
                                   background: CELL_COLOR[state],
@@ -218,6 +267,74 @@ const DashboardView: React.FC<DashboardViewProps> = ({ onOpenReport, meta }) => 
               ))}
               {grouped.length === 0 && !loading && (
                 <tr><td colSpan={days.length + 1} style={{ textAlign: 'center', color: '#bfbfbf', padding: 30 }}>暂无新人账号</td></tr>
+              )}
+            </tbody>
+          </table>
+        </Spin>
+      </div>
+
+      {/* 带教报告提交区块 */}
+      <div style={{ background: '#fff', borderRadius: 10, padding: '16px 18px', boxShadow: '0 1px 2px rgba(0,0,0,.04)', overflowX: 'auto', marginTop: 14 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 12 }}>
+          <b style={{ fontSize: 15 }}>带教报告提交情况</b>
+          <span style={{ color: '#bfbfbf', fontSize: 12.5 }}>小组周报 / 月报 + 个人报告（蓝点=草稿，点击已提交圆点可查看报告）</span>
+        </div>
+        <Spin spinning={loading}>
+          <table style={{ borderCollapse: 'collapse', minWidth: '100%' }}>
+            <thead>
+              <tr>
+                <th style={{ textAlign: 'left', padding: '6px 14px 6px 4px', fontWeight: 400, color: '#8c8c8c', fontSize: 12.5 }}>带教老师</th>
+                {fridays.map(d => (
+                  <th key={d.format('DD')} style={{ padding: '6px 4px', textAlign: 'center', fontWeight: 400, color: '#8c8c8c', fontSize: 12.5 }}>
+                    {d.format('MM-DD')} 周
+                  </th>
+                ))}
+                <th style={{ padding: '6px 10px', textAlign: 'center', fontWeight: 400, color: '#8c8c8c', fontSize: 12.5 }}>个人周报</th>
+                <th style={{ padding: '6px 4px', textAlign: 'center', fontWeight: 400, color: '#8c8c8c', fontSize: 12.5 }}>{month.format('M')} 月报</th>
+              </tr>
+            </thead>
+            <tbody>
+              {(meta?.mentors || []).map(m => {
+                const pc = personCount(m.username);
+                return (
+                  <tr key={m.username}>
+                    <td style={{ textAlign: 'left', padding: '6px 14px 6px 4px', whiteSpace: 'nowrap', fontSize: 12.5 }}>🧑‍🏫 {m.name}</td>
+                    {fridays.map(d => {
+                      const period = toPeriod(d.toDate());
+                      const { state, report } = mentorCellOf(m.username, 'weekly', period);
+                      return (
+                        <td key={period} style={{ textAlign: 'center', padding: '6px 4px' }}>
+                          {state !== 'future' && mentorDot(
+                            state,
+                            `${m.name} ${period} 小组周报：${state === 'ontime' ? '已交' : state === 'late' ? '补交' : state === 'draft' ? '草稿' : '缺交'}`,
+                            report ? () => onOpenReport({ kind: 'mentor-weekly', reportId: report.id, period }) : undefined,
+                          )}
+                        </td>
+                      );
+                    })}
+                    <td style={{ textAlign: 'center', padding: '6px 10px' }}>
+                      <span style={{
+                        fontSize: 12,
+                        color: pc.total > 0 && pc.done === pc.total ? '#389e0d' : pc.done > 0 ? '#d48806' : '#bfbfbf',
+                      }}>
+                        {pc.done}/{pc.total}
+                      </span>
+                    </td>
+                    <td style={{ textAlign: 'center', padding: '6px 4px' }}>
+                      {(() => {
+                        const { state, report } = mentorCellOf(m.username, 'monthly', monthPeriodValue);
+                        return mentorDot(
+                          state,
+                          `${m.name} ${monthPeriodValue} 小组月报：${state === 'ontime' ? '已交' : state === 'late' ? '补交' : state === 'draft' ? '草稿' : state === 'missing' ? '缺交' : '未到期'}`,
+                          report ? () => onOpenReport({ kind: 'mentor-monthly', reportId: report.id, period: monthPeriodValue }) : undefined,
+                        );
+                      })()}
+                    </td>
+                  </tr>
+                );
+              })}
+              {(meta?.mentors || []).length === 0 && !loading && (
+                <tr><td colSpan={fridays.length + 3} style={{ textAlign: 'center', color: '#bfbfbf', padding: 20 }}>暂无带教老师账号</td></tr>
               )}
             </tbody>
           </table>

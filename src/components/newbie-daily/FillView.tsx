@@ -1,66 +1,45 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
-  DatePicker, Button, Tag, Space, message, Popconfirm, Modal, Input, Segmented, Tooltip, Spin, Alert,
+  DatePicker, Button, Tag, Space, message, Popconfirm, Segmented, Spin, Alert, Input,
 } from 'antd';
 import { CheckCircleOutlined, ThunderboltOutlined } from '@ant-design/icons';
 import dayjs, { Dayjs } from 'dayjs';
 import {
-  dailyApi, DAILY_SECTIONS, toPeriod, DailyReport, DailyMeta, formatPeriod,
+  dailyApi, NEWBIE_SECTIONS, toPeriod, fridayOf, monthPeriod, formatPeriod,
+  DailyReport, DailyMeta, ReportType,
 } from '../../services/dailyApi';
+import { NEWBIE_PARSE_RULES } from './parseFill';
+import ParseModal from './ParseModal';
 
 const { TextArea } = Input;
-
-/** 解析填入的栏目标题识别规则（本地规则解析，与周报 04/05 的本地解析同思路） */
-const HEAD_RULES: [RegExp, string][] = [
-  [/^(今日|今天)(的)?(学习|工作内容|工作|进展)?(内容)?[:：]?\s*/, 'today'],
-  [/^(明日|明天)(的)?(学习|工作计划|工作|计划)?(安排)?[:：]?\s*/, 'tomorrow'],
-  [/^(遇到(的)?问题|问题|困难|困惑|问题与困难)[:：]?\s*/, 'problems'],
-  [/^(手头(的)?(学习及工作|学习|工作)?(任务)?|待办(事项)?|任务清单)[:：]?\s*/, 'ongoing'],
-];
-
-function parsePlainText(text: string): Record<string, string> {
-  const out: Record<string, string[]> = { today: [], tomorrow: [], problems: [], ongoing: [] };
-  let current = 'today';
-  for (const rawLine of text.split('\n')) {
-    const line = rawLine.trim();
-    if (!line) continue;
-    let matched = false;
-    for (const [re, key] of HEAD_RULES) {
-      if (re.test(line)) {
-        current = key;
-        const rest = line.replace(re, '').trim();
-        if (rest) out[key].push(rest);
-        matched = true;
-        break;
-      }
-    }
-    if (!matched) out[current].push(line);
-  }
-  const result: Record<string, string> = {};
-  for (const k of Object.keys(out)) result[k] = out[k].join('\n');
-  return result;
-}
 
 interface FillViewProps {
   authUser: any;
   meta: DailyMeta | null;
 }
 
+const TYPE_LABEL: Record<ReportType, string> = { daily: '日报', weekly: '周报', monthly: '月报' };
+
 const FillView: React.FC<FillViewProps> = ({ authUser, meta }) => {
+  const [reportType, setReportType] = useState<ReportType>('daily');
   const [date, setDate] = useState<Dayjs>(dayjs());
   const [report, setReport] = useState<DailyReport | null>(null);
   const [sections, setSections] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(false);
   const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved'>('idle');
   const [parseOpen, setParseOpen] = useState(false);
-  const [parseText, setParseText] = useState('');
-  const [parsed, setParsed] = useState<Record<string, string> | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [missingDays, setMissingDays] = useState<string[]>([]);
   const saveTimer = useRef<number | null>(null);
   const dirtyRef = useRef(false);
 
-  const period = toPeriod(date.toDate());
+  // 周期标识按报告类型计算：日报=工作日，周报=当周五，月报=当月
+  const period = reportType === 'daily'
+    ? toPeriod(date.toDate())
+    : reportType === 'weekly'
+      ? fridayOf(date.toDate())
+      : monthPeriod(date.toDate());
+  const sectionDefs = NEWBIE_SECTIONS[reportType];
 
   // 补交提醒：最近 30 天内未提交日报的工作日（后端计算，前端只展示）
   const refreshMissing = useCallback(() => {
@@ -73,10 +52,10 @@ const FillView: React.FC<FillViewProps> = ({ authUser, meta }) => {
     refreshMissing();
   }, [refreshMissing]);
 
-  const load = useCallback(async (p: string) => {
+  const load = useCallback(async (type: ReportType, p: string) => {
     setLoading(true);
     try {
-      const res = await dailyApi.getMine('daily', p);
+      const res = await dailyApi.getMine(type, p);
       if (res.success) {
         setReport(res.report);
         setSections(res.report?.sections || {});
@@ -84,15 +63,15 @@ const FillView: React.FC<FillViewProps> = ({ authUser, meta }) => {
         setSaveState('idle');
       }
     } catch (e: any) {
-      message.error('加载日报失败：' + e.message);
+      message.error('加载报告失败：' + e.message);
     } finally {
       setLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    load(period);
-  }, [period, load]);
+    load(reportType, period);
+  }, [reportType, period, load]);
 
   // 自动保存（1.5s 防抖），仅内容变化后触发
   useEffect(() => {
@@ -101,7 +80,7 @@ const FillView: React.FC<FillViewProps> = ({ authUser, meta }) => {
     saveTimer.current = window.setTimeout(async () => {
       setSaveState('saving');
       try {
-        const res = await dailyApi.saveDraft('daily', period, sections);
+        const res = await dailyApi.saveDraft(reportType, period, sections);
         if (res.success) {
           setReport(res.report);
           setSaveState('saved');
@@ -118,56 +97,48 @@ const FillView: React.FC<FillViewProps> = ({ authUser, meta }) => {
     return () => {
       if (saveTimer.current) window.clearTimeout(saveTimer.current);
     };
-  }, [sections, period]);
+  }, [sections, period, reportType]);
 
   const handleSectionChange = (key: string, value: string) => {
     dirtyRef.current = true;
     setSections(prev => ({ ...prev, [key]: value }));
   };
 
-  const ensureSavedThen = async (action: () => Promise<void>) => {
-    // 有未保存内容时先落库再执行（如提交）
-    if (dirtyRef.current) {
-      const res = await dailyApi.saveDraft('daily', period, sections);
-      if (!res.success) {
-        message.error(res.message || '保存失败，请重试');
-        return;
-      }
-      setReport(res.report);
-      dirtyRef.current = false;
-    }
-    await action();
-  };
-
   const handleSubmit = async () => {
     setSubmitting(true);
     try {
-      await ensureSavedThen(async () => {
-        const current = await dailyApi.getMine('daily', period);
-        if (!current.success || !current.report) {
-          message.error('保存失败，无法提交');
+      if (dirtyRef.current) {
+        const res = await dailyApi.saveDraft(reportType, period, sections);
+        if (!res.success) {
+          message.error(res.message || '保存失败，请重试');
           return;
         }
-        const res = await dailyApi.submit(current.report.id);
-        if (res.success) {
-          setReport(res.report);
-          refreshMissing();
-          message.success('日报已提交');
-        } else {
-          message.error(res.message || '提交失败');
-        }
-      });
+        setReport(res.report);
+        dirtyRef.current = false;
+      }
+      const current = await dailyApi.getMine(reportType, period);
+      if (!current.success || !current.report) {
+        message.error('保存失败，无法提交');
+        return;
+      }
+      const res = await dailyApi.submit(current.report.id);
+      if (res.success) {
+        setReport(res.report);
+        refreshMissing();
+        message.success(`${TYPE_LABEL[reportType]}已提交`);
+      } else {
+        message.error(res.message || '提交失败');
+      }
     } finally {
       setSubmitting(false);
     }
   };
 
-  const applyParsed = (mode: 'overwrite' | 'append') => {
-    if (!parsed) return;
+  const applyParsed = (mode: 'overwrite' | 'append', parsed: Record<string, string>) => {
     dirtyRef.current = true;
     setSections(prev => {
       const next = { ...prev };
-      for (const { key } of DAILY_SECTIONS) {
+      for (const { key } of sectionDefs) {
         const piece = (parsed[key] || '').trim();
         if (!piece) continue;
         next[key] = mode === 'overwrite' || !prev[key]?.trim()
@@ -177,8 +148,6 @@ const FillView: React.FC<FillViewProps> = ({ authUser, meta }) => {
       return next;
     });
     setParseOpen(false);
-    setParseText('');
-    setParsed(null);
     message.success('已填入，请检查确认');
   };
 
@@ -187,23 +156,43 @@ const FillView: React.FC<FillViewProps> = ({ authUser, meta }) => {
   const submitted = report?.status === 'submitted';
   const hasContent = Object.values(sections).some(v => v?.trim());
 
+  const periodPicker = reportType === 'daily' ? (
+    <DatePicker
+      value={date}
+      onChange={d => d && setDate(d)}
+      allowClear={false}
+      disabledDate={d => d.day() === 0 || d.day() === 6}
+    />
+  ) : reportType === 'weekly' ? (
+    <DatePicker
+      picker="week"
+      value={date}
+      onChange={d => d && setDate(d)}
+      allowClear={false}
+    />
+  ) : (
+    <DatePicker
+      picker="month"
+      value={date}
+      onChange={d => d && setDate(d)}
+      allowClear={false}
+    />
+  );
+
   return (
     <div style={{ maxWidth: 900, margin: '0 auto', padding: '16px 20px' }}>
       <Space wrap style={{ marginBottom: 14 }} size={10}>
         <Segmented
           options={[
             { label: '日报', value: 'daily' },
-            { label: '周报（第三期开放）', value: 'weekly', disabled: true },
-            { label: '月报（第三期开放）', value: 'monthly', disabled: true },
+            { label: '周报', value: 'weekly' },
+            { label: '月报', value: 'monthly' },
           ]}
-          value="daily"
+          value={reportType}
+          onChange={v => setReportType(v as ReportType)}
         />
-        <DatePicker
-          value={date}
-          onChange={d => d && setDate(d)}
-          allowClear={false}
-          disabledDate={d => d.day() === 0 || d.day() === 6}
-        />
+        {periodPicker}
+        <Tag color="blue">周期：{formatPeriod(period)}</Tag>
         {myGroup && <Tag color="blue">{myGroup.name}{myGroup.leader ? ` · 组长：${myGroup.leader}` : ''}</Tag>}
         {(myMentor || authUser?.mentor) && (
           <Tag color="orange">带教老师：{myMentor?.name || authUser?.mentor}</Tag>
@@ -224,7 +213,7 @@ const FillView: React.FC<FillViewProps> = ({ authUser, meta }) => {
         </Button>
       </Space>
 
-      {missingDays.length > 0 && (
+      {missingDays.length > 0 && reportType === 'daily' && (
         <Alert
           type="warning"
           showIcon
@@ -246,7 +235,7 @@ const FillView: React.FC<FillViewProps> = ({ authUser, meta }) => {
       )}
 
       <Spin spinning={loading}>
-        {DAILY_SECTIONS.map((sec, idx) => (
+        {sectionDefs.map((sec, idx) => (
           <div key={sec.key} style={{
             background: '#fff', borderRadius: 10, marginBottom: 12,
             boxShadow: '0 1px 2px rgba(0,0,0,.04)', overflow: 'hidden',
@@ -265,7 +254,7 @@ const FillView: React.FC<FillViewProps> = ({ authUser, meta }) => {
             <div style={{ padding: '10px 16px' }}>
               <TextArea
                 value={sections[sec.key] || ''}
-                onChange={e => handleSectionChange(sec.key, e.target.value)}
+                onChange={(e: any) => handleSectionChange(sec.key, e.target.value)}
                 autoSize={{ minRows: 3, maxRows: 12 }}
                 placeholder={`填写${sec.label}…`}
                 style={{ fontSize: 13.5, lineHeight: 1.8 }}
@@ -287,82 +276,25 @@ const FillView: React.FC<FillViewProps> = ({ authUser, meta }) => {
         </span>
         <span style={{ flex: 1 }} />
         <Popconfirm
-          title="提交本日日报？"
+          title={`提交本${reportType === 'daily' ? '日' : reportType === 'weekly' ? '周' : '月'}${TYPE_LABEL[reportType]}？`}
           description="提交后仍可修改（自动保存），但会标记提交时间。"
           onConfirm={handleSubmit}
           okText="提交"
           cancelText="再想想"
         >
           <Button type="primary" loading={submitting} disabled={!hasContent}>
-            {submitted ? '更新提交时间' : '提交日报'}
+            {submitted ? '更新提交时间' : `提交${TYPE_LABEL[reportType]}`}
           </Button>
         </Popconfirm>
       </div>
 
-      {/* 智能解析填入 */}
-      <Modal
-        title="✨ 智能解析填入"
+      <ParseModal
         open={parseOpen}
-        onCancel={() => { setParseOpen(false); setParsed(null); }}
-        width={860}
-        footer={null}
-      >
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 40px 1fr', gap: 12 }}>
-          <div>
-            <div style={{ marginBottom: 6, color: '#8c8c8c', fontSize: 12.5 }}>
-              粘贴整段文字（含「今日/明日/遇到问题/手头任务」等标题识别更准）
-            </div>
-            <TextArea
-              value={parseText}
-              onChange={e => { setParseText(e.target.value); setParsed(null); }}
-              style={{ minHeight: 300, fontSize: 13, lineHeight: 1.8 }}
-              placeholder={'今日学习：…\n明日计划：…\n遇到问题：…\n手头任务：…'}
-            />
-          </div>
-          <div style={{ alignSelf: 'center', textAlign: 'center' }}>
-            <Button
-              type="primary"
-              shape="circle"
-              icon="➜"
-              disabled={!parseText.trim()}
-              onClick={() => setParsed(parsePlainText(parseText))}
-            />
-          </div>
-          <div>
-            <div style={{ marginBottom: 6, color: '#8c8c8c', fontSize: 12.5 }}>解析预览</div>
-            <div style={{ minHeight: 300, maxHeight: 300, overflow: 'auto' }}>
-              {parsed ? DAILY_SECTIONS.map(sec => (
-                <div key={sec.key} style={{ border: '1px solid #e8e8e8', borderRadius: 8, marginBottom: 8 }}>
-                  <div style={{
-                    background: parsed[sec.key]?.trim() ? '#f6ffed' : '#fafafa',
-                    color: parsed[sec.key]?.trim() ? '#389e0d' : '#bfbfbf',
-                    fontSize: 12, padding: '4px 10px', fontWeight: 600,
-                  }}>
-                    {sec.label}{parsed[sec.key]?.trim() ? '' : '（未识别到）'}
-                  </div>
-                  {parsed[sec.key]?.trim() && (
-                    <div style={{ padding: '6px 10px', fontSize: 12.5, color: '#595959', whiteSpace: 'pre-wrap', lineHeight: 1.7 }}>
-                      {parsed[sec.key]}
-                    </div>
-                  )}
-                </div>
-              )) : (
-                <div style={{ color: '#bfbfbf', fontSize: 13, padding: '40px 0', textAlign: 'center' }}>
-                  点击中间按钮开始解析
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 12 }}>
-          <Tooltip title="已有内容的栏目保留，解析结果追加到末尾">
-            <Button disabled={!parsed} onClick={() => applyParsed('append')}>追加填入</Button>
-          </Tooltip>
-          <Tooltip title="解析结果替换对应栏目的现有内容">
-            <Button type="primary" disabled={!parsed} onClick={() => applyParsed('overwrite')}>覆盖填入</Button>
-          </Tooltip>
-        </div>
-      </Modal>
+        sections={sectionDefs}
+        rules={NEWBIE_PARSE_RULES}
+        onApply={applyParsed}
+        onCancel={() => setParseOpen(false)}
+      />
     </div>
   );
 };

@@ -1,14 +1,15 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
-  DatePicker, Button, Tag, Avatar, Input, message, Popconfirm, Segmented, Spin, Empty, Tooltip,
+  DatePicker, Button, Tag, Avatar, Input, message, Popconfirm, Segmented, Spin, Empty, Select, Modal,
 } from 'antd';
 import {
-  CheckCircleOutlined, DeleteOutlined, EyeOutlined, SendOutlined,
+  CheckCircleOutlined, DeleteOutlined, EyeOutlined, SendOutlined, ThunderboltOutlined,
 } from '@ant-design/icons';
 import dayjs, { Dayjs } from 'dayjs';
 import {
-  dailyApi, DAILY_SECTIONS, toPeriod, formatPeriod,
-  DailyReport, DailyComment, DailyMeta, FeedEntry, DailyReader,
+  dailyApi, NEWBIE_SECTIONS, MENTOR_GROUP_SECTIONS, MENTOR_PERSON_SECTIONS,
+  toPeriod, fridayOf, monthPeriod, formatPeriod,
+  DailyReport, DailyComment, DailyMeta, FeedEntry, DailyReader, MentorReport, SectionDef,
 } from '../../services/dailyApi';
 
 const { TextArea } = Input;
@@ -27,50 +28,90 @@ function avatarColor(name: string): string {
   return AVATAR_COLORS[h % AVATAR_COLORS.length];
 }
 
+/** 浏览种类：新人日/周/月报 + 带教周/月报 */
+export type BrowseKind = 'daily' | 'weekly' | 'monthly' | 'mentor-weekly' | 'mentor-monthly';
+
+export interface BrowseTarget {
+  kind: BrowseKind;
+  period: string;
+  username?: string;   // 新人报告：按新人定位
+  reportId?: string;   // 带教报告：按报告定位
+}
+
+const KIND_OPTIONS = [
+  { label: '新人日报', value: 'daily' },
+  { label: '新人周报', value: 'weekly' },
+  { label: '新人月报', value: 'monthly' },
+  { label: '带教周报', value: 'mentor-weekly' },
+  { label: '带教月报', value: 'mentor-monthly' },
+];
+
 interface BrowseViewProps {
   authUser: any;
   meta: DailyMeta | null;
-  /** 看板跳转目标：自动定位到指定新人与周期，定位完成后通过 onTargetConsumed 清除 */
-  target?: { username: string; period: string } | null;
+  target?: BrowseTarget | null;
   onTargetConsumed?: () => void;
 }
 
-/** YYYYMMDD → Dayjs */
 function periodToDayjs(p: string): Dayjs {
+  if (/^\d{6}$/.test(p)) return dayjs(new Date(+p.slice(0, 4), +p.slice(4, 6) - 1, 1));
   return dayjs(new Date(+p.slice(0, 4), +p.slice(4, 6) - 1, +p.slice(6, 8)));
 }
 
 const BrowseView: React.FC<BrowseViewProps> = ({ authUser, meta, target, onTargetConsumed }) => {
-  const [date, setDate] = useState<Dayjs>(dayjs());
+  const [kind, setKind] = useState<BrowseKind>(target?.kind || 'daily');
+  const [date, setDate] = useState<Dayjs>(() => (target ? periodToDayjs(target.period) : dayjs()));
   const [entries, setEntries] = useState<FeedEntry[]>([]);
+  const [mentorReports, setMentorReports] = useState<MentorReport[]>([]);
   const [loadedPeriod, setLoadedPeriod] = useState<string | null>(null);
   const [filter, setFilter] = useState<'all' | 'mine'>('all');
-  const [selected, setSelected] = useState<string | null>(null);
-  const [report, setReport] = useState<DailyReport | null>(null);
+  const [selected, setSelected] = useState<string | null>(null); // 新人 username 或 mentor 报告 id
+  const [report, setReport] = useState<DailyReport | MentorReport | null>(null);
   const [comments, setComments] = useState<DailyComment[]>([]);
   const [readers, setReaders] = useState<DailyReader[]>([]);
   const [loadingFeed, setLoadingFeed] = useState(false);
   const [loadingDetail, setLoadingDetail] = useState(false);
   const [input, setInput] = useState('');
   const [replyTo, setReplyTo] = useState<DailyComment | null>(null);
+  const [quote, setQuote] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
+  const [aiOpen, setAiOpen] = useState(false);
+  const [aiText, setAiText] = useState('');
+  const [aiLoading, setAiLoading] = useState(false);
+  const reportBodyRef = useRef<HTMLDivElement>(null);
 
-  const period = toPeriod(date.toDate());
+  const isMentorKind = kind.startsWith('mentor-');
+  const mentorType: 'weekly' | 'monthly' = kind === 'mentor-monthly' ? 'monthly' : 'weekly';
+
+  const period = kind === 'daily'
+    ? toPeriod(date.toDate())
+    : kind === 'weekly' || kind === 'mentor-weekly'
+      ? fridayOf(date.toDate())
+      : monthPeriod(date.toDate());
 
   const loadFeed = useCallback(async () => {
     setLoadingFeed(true);
     try {
-      const res = await dailyApi.feed('daily', period);
-      if (res.success) {
-        setEntries(res.entries);
-        setLoadedPeriod(period);
+      if (isMentorKind) {
+        const res = await dailyApi.mentorFeed(mentorType, period);
+        if (res.success) {
+          setMentorReports(res.reports);
+          setLoadedPeriod(period);
+        }
+      } else {
+        const res = await dailyApi.feed(kind as 'daily' | 'weekly' | 'monthly', period);
+        if (res.success) {
+          setEntries(res.entries);
+          setLoadedPeriod(period);
+        }
       }
     } catch (e: any) {
       message.error('加载列表失败：' + e.message);
     } finally {
       setLoadingFeed(false);
     }
-  }, [period]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [kind, period]);
 
   useEffect(() => { loadFeed(); }, [loadFeed]);
 
@@ -93,7 +134,7 @@ const BrowseView: React.FC<BrowseViewProps> = ({ authUser, meta, target, onTarge
     }
   }, []);
 
-  const handleSelect = (entry: FeedEntry) => {
+  const handleSelectEntry = (entry: FeedEntry) => {
     setSelected(entry.username);
     if (entry.report) {
       loadDetail(entry.report.id);
@@ -104,22 +145,38 @@ const BrowseView: React.FC<BrowseViewProps> = ({ authUser, meta, target, onTarge
     }
   };
 
-  // 看板跳转：周期不同先切日期（触发 feed 重载），且必须等目标周期的 feed 就绪后再定位，
-  // 否则会拿旧周期的 entries 误判（report 为 null 显示"尚未填写"）
+  const handleSelectMentorReport = (r: MentorReport) => {
+    setSelected(r.id);
+    loadDetail(r.id);
+  };
+
+  // 外部跳转定位（看板圆点等）：切 kind → 切日期 → 等目标周期 feed 就绪 → 定位
   useEffect(() => {
     if (!target) return;
+    if (target.kind !== kind) {
+      setKind(target.kind);
+      return;
+    }
     if (target.period !== period) {
       setDate(periodToDayjs(target.period));
       return;
     }
-    if (loadedPeriod !== period) return; // 目标周期 feed 尚未返回
-    const entry = entries.find(e => e.username === target.username);
-    if (entry) {
-      handleSelect(entry);
-      onTargetConsumed?.();
+    if (loadedPeriod !== period) return; // 目标周期 feed 尚未返回（BUG-002 防线）
+    if (target.reportId) {
+      const r = mentorReports.find(x => x.id === target.reportId);
+      if (r) {
+        handleSelectMentorReport(r);
+        onTargetConsumed?.();
+      }
+    } else if (target.username) {
+      const entry = entries.find(e => e.username === target.username);
+      if (entry) {
+        handleSelectEntry(entry);
+        onTargetConsumed?.();
+      }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [target, entries, loadedPeriod]);
+  }, [target, kind, period, entries, mentorReports, loadedPeriod]);
 
   // 评论按楼层组织（一层回复）
   const { topLevel, repliesOf } = useMemo(() => {
@@ -155,12 +212,14 @@ const BrowseView: React.FC<BrowseViewProps> = ({ authUser, meta, target, onTarge
       const res = await dailyApi.addComment(report.id, {
         content,
         parentId: replyTo?.id,
+        quote: quote || undefined,
         mentions: parseMentions(content),
       });
       if (res.success) {
         setComments(res.comments);
         setInput('');
         setReplyTo(null);
+        setQuote(null);
         message.success(replyTo ? '回复成功' : '批注成功');
       } else {
         message.error(res.message || '发送失败');
@@ -186,12 +245,36 @@ const BrowseView: React.FC<BrowseViewProps> = ({ authUser, meta, target, onTarge
     }
   };
 
+  // 划词批注：在报告正文上划选文字，生成引用批注
+  const handleReportMouseUp = () => {
+    const sel = window.getSelection();
+    const text = sel?.toString().trim();
+    if (text && report && reportBodyRef.current?.contains(sel?.anchorNode || null)) {
+      setQuote(text.slice(0, 200));
+    }
+  };
+
+  const handleAi = async () => {
+    if (!report) return;
+    setAiOpen(true);
+    setAiLoading(true);
+    setAiText('');
+    try {
+      const res = await dailyApi.aiSummary(report.id);
+      setAiText(res.success ? res.summary : (res.message || 'AI 服务异常'));
+    } catch (e: any) {
+      setAiText('AI 服务异常：' + e.message);
+    } finally {
+      setAiLoading(false);
+    }
+  };
+
   const visibleEntries = useMemo(() => {
     if (filter === 'mine') return entries.filter(e => e.mentor === authUser?.username);
     return entries;
   }, [entries, filter, authUser]);
 
-  const grouped = useMemo(() => {
+  const newbieGrouped = useMemo(() => {
     const groups: { name: string; leader?: string; items: FeedEntry[] }[] = [];
     const byGroup = new Map<string, FeedEntry[]>();
     for (const e of visibleEntries) {
@@ -207,6 +290,25 @@ const BrowseView: React.FC<BrowseViewProps> = ({ authUser, meta, target, onTarge
     if (rest?.length) groups.push({ name: '未分组', items: rest });
     return groups;
   }, [visibleEntries, meta]);
+
+  const mentorGrouped = useMemo(() => {
+    const map = new Map<string, MentorReport[]>();
+    for (const r of mentorReports) {
+      const key = r.mentorName || r.mentor;
+      (map.get(key) ?? map.set(key, []).get(key)!).push(r);
+    }
+    for (const list of map.values()) {
+      list.sort((a, b) => (a.scope === b.scope ? 0 : a.scope === 'group' ? -1 : 1));
+    }
+    return [...map.entries()];
+  }, [mentorReports]);
+
+  const isMentorReport = (r: any): r is MentorReport => r && 'scope' in r;
+  const sectionDefs: SectionDef[] = report
+    ? isMentorReport(report)
+      ? (report.scope === 'group' ? MENTOR_GROUP_SECTIONS : MENTOR_PERSON_SECTIONS)[report.reportType]
+      : NEWBIE_SECTIONS[(report as DailyReport).reportType] || NEWBIE_SECTIONS.daily
+    : [];
 
   const selectedEntry = entries.find(e => e.username === selected);
   const readerNames = readers.map(r => r.name).join('、');
@@ -256,29 +358,51 @@ const BrowseView: React.FC<BrowseViewProps> = ({ authUser, meta, target, onTarge
     );
   };
 
+  const periodPicker = kind === 'daily' ? (
+    <DatePicker
+      value={date}
+      onChange={d => d && setDate(d)}
+      allowClear={false}
+      size="small"
+      style={{ width: '100%', marginBottom: 8 }}
+      disabledDate={d => d.day() === 0 || d.day() === 6}
+    />
+  ) : (
+    <DatePicker
+      picker={kind === 'weekly' || kind === 'mentor-weekly' ? 'week' : 'month'}
+      value={date}
+      onChange={d => d && setDate(d)}
+      allowClear={false}
+      size="small"
+      style={{ width: '100%', marginBottom: 8 }}
+    />
+  );
+
   return (
     <div style={{ display: 'grid', gridTemplateColumns: '230px 1fr 330px', gap: 14, padding: '16px 20px', alignItems: 'start' }}>
-      {/* 左：小组树 */}
+      {/* 左：报告树 */}
       <div style={{ background: '#fff', borderRadius: 10, padding: 10, boxShadow: '0 1px 2px rgba(0,0,0,.04)' }}>
-        <DatePicker
-          value={date}
-          onChange={d => d && setDate(d)}
-          allowClear={false}
+        <Select
+          value={kind}
+          onChange={v => { setKind(v as BrowseKind); setSelected(null); setReport(null); }}
+          options={KIND_OPTIONS}
           size="small"
           style={{ width: '100%', marginBottom: 8 }}
-          disabledDate={d => d.day() === 0 || d.day() === 6}
         />
-        <Segmented
-          block
-          size="small"
-          value={filter}
-          onChange={v => setFilter(v as 'all' | 'mine')}
-          options={[{ label: '全部', value: 'all' }, { label: '⭐ 我带的', value: 'mine' }]}
-          style={{ marginBottom: 8 }}
-        />
+        {periodPicker}
+        {!isMentorKind && (
+          <Segmented
+            block
+            size="small"
+            value={filter}
+            onChange={v => setFilter(v as 'all' | 'mine')}
+            options={[{ label: '全部', value: 'all' }, { label: '⭐ 我带的', value: 'mine' }]}
+            style={{ marginBottom: 8 }}
+          />
+        )}
         <Spin spinning={loadingFeed}>
-          {grouped.length === 0 && <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无新人账号" />}
-          {grouped.map(g => (
+          {!isMentorKind && newbieGrouped.length === 0 && <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无新人账号" />}
+          {!isMentorKind && newbieGrouped.map(g => (
             <div key={g.name}>
               <div style={{ fontSize: 12, color: '#8c8c8c', padding: '8px 8px 4px' }}>
                 ▾ {g.name}{g.leader ? ` · 组长：${g.leader}` : ''}
@@ -288,7 +412,7 @@ const BrowseView: React.FC<BrowseViewProps> = ({ authUser, meta, target, onTarge
                 return (
                   <div
                     key={e.username}
-                    onClick={() => handleSelect(e)}
+                    onClick={() => handleSelectEntry(e)}
                     style={{
                       display: 'flex', alignItems: 'center', gap: 8, padding: '7px 10px',
                       borderRadius: 6, cursor: 'pointer', fontSize: 13.5,
@@ -307,43 +431,92 @@ const BrowseView: React.FC<BrowseViewProps> = ({ authUser, meta, target, onTarge
               })}
             </div>
           ))}
+          {isMentorKind && mentorGrouped.length === 0 && !loadingFeed && (
+            <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="本周期暂无带教报告" />
+          )}
+          {isMentorKind && mentorGrouped.map(([mentorName, reports]) => (
+            <div key={mentorName}>
+              <div style={{ fontSize: 12, color: '#8c8c8c', padding: '8px 8px 4px' }}>▾ 🧑‍🏫 {mentorName}</div>
+              {reports.map(r => {
+                const ok = r.status === 'submitted';
+                return (
+                  <div
+                    key={r.id}
+                    onClick={() => handleSelectMentorReport(r)}
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: 8, padding: '7px 10px 7px 18px',
+                      borderRadius: 6, cursor: 'pointer', fontSize: 13,
+                      background: selected === r.id ? '#e6f4ff' : undefined,
+                      color: selected === r.id ? '#0958d9' : undefined,
+                      fontWeight: selected === r.id ? 600 : 400,
+                    }}
+                  >
+                    {r.scope === 'group' ? '👥 小组报告' : `👤 ${r.targetName || r.target}`}
+                    <span style={{ marginLeft: 'auto', fontSize: 11, color: ok ? '#52c41a' : '#faad14' }}>
+                      {ok ? '已交' : '草稿'}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          ))}
         </Spin>
       </div>
 
       {/* 中：报告正文 */}
       <div style={{ background: '#fff', borderRadius: 10, boxShadow: '0 1px 2px rgba(0,0,0,.04)', minHeight: 400 }}>
-        {!selected && <Empty style={{ marginTop: 120 }} description="从左侧选择一位新人查看日报" />}
-        {selected && !report && !loadingDetail && (
-          <Empty style={{ marginTop: 120 }} description={`${selectedEntry?.name || ''} 尚未填写 ${formatPeriod(period)} 的日报`} />
+        {!selected && <Empty style={{ marginTop: 120 }} description="从左侧选择一份报告查看" />}
+        {selected && !report && !loadingDetail && !isMentorKind && (
+          <Empty style={{ marginTop: 120 }} description={`${selectedEntry?.name || ''} 尚未填写 ${formatPeriod(period)} 的报告`} />
         )}
         {report && (
           <Spin spinning={loadingDetail}>
             <div style={{ padding: '16px 20px 12px', borderBottom: '1px solid #f5f5f5' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <Avatar size={36} style={{ background: avatarColor(report.authorName || '?') }}>{report.authorName?.[0]}</Avatar>
-                <div>
-                  <div style={{ fontWeight: 700, fontSize: 15 }}>
-                    {report.authorName} · 日报 <Tag color="blue" style={{ marginLeft: 4 }}>{formatPeriod(report.period)}</Tag>
-                  </div>
-                  <div style={{ color: '#8c8c8c', fontSize: 12, marginTop: 2 }}>
-                    {report.groupName || '未分组'}
-                    {report.mentorName ? ` · 带教：${report.mentorName}` : ''}
-                    {report.submittedAt ? ` · 提交于 ${report.submittedAt.slice(11, 16)}` : ' · 草稿（未提交）'}
-                  </div>
-                </div>
-                <div style={{ marginLeft: 'auto' }}>
+                {isMentorReport(report) ? (
+                  <>
+                    <Avatar size={36} style={{ background: avatarColor(report.mentorName || '?') }}>{report.mentorName?.[0]}</Avatar>
+                    <div>
+                      <div style={{ fontWeight: 700, fontSize: 15 }}>
+                        {report.mentorName} · {report.scope === 'group' ? '小组' : `个人（${report.targetName || report.target}）`}
+                        带教{report.reportType === 'weekly' ? '周报' : '月报'}
+                        <Tag color="orange" style={{ marginLeft: 4 }}>{formatPeriod(report.period)}</Tag>
+                      </div>
+                      <div style={{ color: '#8c8c8c', fontSize: 12, marginTop: 2 }}>
+                        {report.submittedAt ? `提交于 ${report.submittedAt.slice(11, 16)}` : '草稿（未提交）'}
+                      </div>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <Avatar size={36} style={{ background: avatarColor((report as DailyReport).authorName || '?') }}>
+                      {(report as DailyReport).authorName?.[0]}
+                    </Avatar>
+                    <div>
+                      <div style={{ fontWeight: 700, fontSize: 15 }}>
+                        {(report as DailyReport).authorName} · {{ daily: '日报', weekly: '周报', monthly: '月报' }[(report as DailyReport).reportType]}
+                        <Tag color="blue" style={{ marginLeft: 4 }}>{formatPeriod(report.period)}</Tag>
+                      </div>
+                      <div style={{ color: '#8c8c8c', fontSize: 12, marginTop: 2 }}>
+                        {(report as DailyReport).groupName || '未分组'}
+                        {(report as DailyReport).mentorName ? ` · 带教：${(report as DailyReport).mentorName}` : ''}
+                        {report.submittedAt ? ` · 提交于 ${report.submittedAt.slice(11, 16)}` : ' · 草稿（未提交）'}
+                      </div>
+                    </div>
+                  </>
+                )}
+                <div style={{ marginLeft: 'auto', display: 'flex', gap: 8, alignItems: 'center' }}>
+                  <Button type="link" icon={<ThunderboltOutlined />} onClick={handleAi}>AI 总结</Button>
                   {report.status === 'submitted'
                     ? <Tag icon={<CheckCircleOutlined />} color="success">已提交</Tag>
                     : <Tag color="warning">草稿</Tag>}
                 </div>
               </div>
             </div>
-            <div style={{ padding: '16px 20px' }}>
-              {DAILY_SECTIONS.map(sec => (
+            <div style={{ padding: '16px 20px' }} ref={reportBodyRef} onMouseUp={handleReportMouseUp}>
+              {sectionDefs.map(sec => (
                 <div key={sec.key} style={{ marginBottom: 18 }}>
-                  <div style={{
-                    fontWeight: 600, marginBottom: 6, display: 'flex', alignItems: 'center', gap: 8,
-                  }}>
+                  <div style={{ fontWeight: 600, marginBottom: 6, display: 'flex', alignItems: 'center', gap: 8 }}>
                     <span style={{ width: 4, height: 14, background: '#1677ff', borderRadius: 2, display: 'inline-block' }} />
                     {sec.label}
                   </div>
@@ -352,6 +525,7 @@ const BrowseView: React.FC<BrowseViewProps> = ({ authUser, meta, target, onTarge
                   </div>
                 </div>
               ))}
+              <div style={{ fontSize: 11.5, color: '#bfbfbf' }}>💡 在正文上划选文字，可对选句发起批注</div>
             </div>
           </Spin>
         )}
@@ -376,6 +550,16 @@ const BrowseView: React.FC<BrowseViewProps> = ({ authUser, meta, target, onTarge
               )}
               {topLevel.map(c => renderComment(c))}
             </div>
+            {quote && (
+              <div style={{
+                background: '#fffbe6', borderLeft: '3px solid #faad14', borderRadius: '0 6px 6px 0',
+                padding: '4px 8px', fontSize: 12, color: '#8c8c8c', marginTop: 8,
+                display: 'flex', justifyContent: 'space-between', gap: 8,
+              }}>
+                <span>引用：「{quote.length > 40 ? quote.slice(0, 40) + '…' : quote}」</span>
+                <Button type="link" size="small" style={{ padding: 0, fontSize: 12 }} onClick={() => setQuote(null)}>取消</Button>
+              </div>
+            )}
             {replyTo && (
               <div style={{
                 background: '#f0f5ff', borderRadius: 6, padding: '4px 8px', fontSize: 12,
@@ -390,7 +574,7 @@ const BrowseView: React.FC<BrowseViewProps> = ({ authUser, meta, target, onTarge
                 value={input}
                 onChange={e => setInput(e.target.value)}
                 autoSize={{ minRows: 1, maxRows: 4 }}
-                placeholder={replyTo ? `回复 ${replyTo.authorName}…` : '写下批注，@姓名 可提醒对方…'}
+                placeholder={quote ? '对选句的批注…' : replyTo ? `回复 ${replyTo.authorName}…` : '写下批注，@姓名 可提醒对方…'}
                 onPressEnter={e => {
                   if (!e.shiftKey) {
                     e.preventDefault();
@@ -400,12 +584,25 @@ const BrowseView: React.FC<BrowseViewProps> = ({ authUser, meta, target, onTarge
               />
               <Button type="primary" icon={<SendOutlined />} loading={sending} onClick={handleSend} disabled={!input.trim()} />
             </div>
-            <Tooltip title="划词批注（选中正文句子批注）将在第二期随看板一起提供">
-              <div style={{ fontSize: 11.5, color: '#bfbfbf', marginTop: 6 }}>提示：@姓名 可触发通知提醒</div>
-            </Tooltip>
+            <div style={{ fontSize: 11.5, color: '#bfbfbf', marginTop: 6 }}>提示：@姓名 可触发通知提醒；正文划词可引用批注</div>
           </>
         )}
       </div>
+
+      {/* AI 总结 */}
+      <Modal
+        title="✨ AI 总结与完成度评估"
+        open={aiOpen}
+        onCancel={() => setAiOpen(false)}
+        footer={<Button type="primary" onClick={() => setAiOpen(false)}>关闭</Button>}
+        width={640}
+      >
+        <Spin spinning={aiLoading} tip="AI 分析中…">
+          <div style={{ minHeight: 120, whiteSpace: 'pre-wrap', fontSize: 13.5, lineHeight: 1.9, color: '#404040', padding: '8px 0' }}>
+            {aiText}
+          </div>
+        </Spin>
+      </Modal>
     </div>
   );
 };

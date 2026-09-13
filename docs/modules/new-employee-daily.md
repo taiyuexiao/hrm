@@ -1,6 +1,6 @@
 # 新人培养报告（日报/周报/月报）模块
 
-> 状态：✅ 第二期已完成（2026-09-13，e2e 全量回归 26/26 通过）
+> 状态：✅ 第三期已完成，功能全部就绪（2026-09-13，e2e 全量回归 29/29 通过）
 > UI 原型：`docs/modules/new-employee-daily/prototype.html`（6 屏，浏览器直接打开）
 
 ## 一、模块是什么
@@ -41,8 +41,9 @@
 | `newbie_reports` | id(UUID)、username、report_type、period、sections(JSON)、status(draft/submitted)、submitted_at、version、软删除；UNIQUE(username, report_type, period) |
 | `newbie_comments` | id、report_id、parent_id（回复）、author_id/name/role、content、quote（划词批注引用）、mentions(JSON)、created_at |
 | `newbie_report_reads` | (report_id, username) 主键、read_at —— 已读状态 |
+| `mentor_reports` | id(UUID)、mentor、scope(group/person)、target（组 id 或新人工号）、report_type(weekly/monthly)、period、sections(JSON)、status、submitted_at、version、软删除；UNIQUE(mentor, scope, target, report_type, period) |
 
-`mentor_reports`（小组/个人带教报告）留待第三期，结构预留：scope(group/person) + target + content JSON。
+评论/已读通过 `DailyDao.findAnyReport` 通挂两类报告（UUID 跨表唯一）；新人报告 sections 键跨日/周/月稳定（today/tomorrow/problems/ongoing），标签由前端按类型切换；mentor 报告两套模板（小组 groupTasks/training/overall/nextTasks/issues，个人 traits/progress/improve/guidance/unsolved）均为前端 schema，后端无感。
 
 ## 四、API 一览（`/api/daily/**`）
 
@@ -54,24 +55,37 @@
 | PUT `/reports` | 保存草稿（upsert 自己的，仅 newbie） | 登录+本人 |
 | POST `/reports/{id}/submit` | 提交（幂等） | 本人 |
 | GET `/feed?type=&period=` | 全员该周期报告（左连接新人表，缺报显示 null） | 登录 |
-| GET `/reports/{id}` | 报告 + 评论 + 已读名单 | 登录 |
+| GET `/reports/{id}` | 报告 + 评论 + 已读名单（两类报告通用） | 登录 |
 | POST `/reports/{id}/comments` | 评论/回复（quote、mentions），触发通知 | 登录 |
 | DELETE `/comments/{id}` | 删自己的评论（superadmin 可删任意） | 本人/超管 |
 | POST `/reports/{id}/read` | 上报已读 | 登录 |
-| GET `/dashboard?from=&to=` | 看板数据源：区间内新人报告原始行（已交/补交/缺交判定在前端） | mentor/leader/超管 |
-| GET `/missing?days=N` | 最近 N 天（不含今天）未提交日报的工作日清单 | 仅 newbie |
+| GET `/dashboard?from=&to=` | 看板数据源：区间内新人报告 + mentor 周/月报原始行（判定在前端） | mentor/leader/超管 |
+| GET `/missing?days=N` | 新人：最近 N 天未交工作日；mentor：缺交的小组周报周期 | newbie/mentor |
+| GET `/mentor-reports/mine?scope=&target=&type=&period=` | 我的带教报告（无则 null） | mentor |
+| PUT `/mentor-reports` | 带教报告草稿（upsert 自己的；个人报告对象必须是所带新人） | mentor |
+| POST `/mentor-reports/{id}/submit` | 提交带教报告（幂等） | mentor 本人 |
+| GET `/mentor-reports/feed?type=&period=` | 某周期全部 mentor 报告 | 登录 |
+| POST `/reports/{id}/ai-summary` | AI 总结 + 完成度评估（两类报告通用，复用 LlmService） | 登录 |
 
 ## 五、前端结构
 
-- `src/services/dailyApi.ts`：API 客户端
-- `src/components/newbie-daily/`：`DailyApp`（外壳+填报/浏览/看板切换）、`FillView`（五段式+解析填入+自动保存+提交+补交提醒横幅）、`BrowseView`（小组树+报告+评论区，支持看板跳转定位）、`DashboardView`（月视图点阵图）、`ChoosePage`（双系统选择页）
+- `src/services/dailyApi.ts`：API 客户端 + 栏目 schema（NEWBIE/MENTOR_GROUP/MENTOR_PERSON_SECTIONS）+ 周期工具（toPeriod/fridayOf/monthPeriod/formatPeriod）
+- `src/components/newbie-daily/`：`DailyApp`（外壳+填报/带教填报/浏览/看板切换）、`FillView`（新人日/周/月报）、`MentorFillView`（小组+个人带教报告）、`BrowseView`（五类报告浏览+划词批注+AI 总结）、`DashboardView`（新人点阵+带教提交区块）、`ParseModal`+`parseFill.ts`（解析填入）、`ChoosePage`（双系统选择页）
 - 对接点：`App.tsx` 路由 `/daily`、`/choose`；侧边栏「新人报告」（非 daily 角色可见）；`role='daily'` 根路由重定向；双系统账号登录后跳 `/choose`
 
 ## 六、分期
 
 - **第一期（2026-09-13 完成）**：账号模型 + 登录分流/选择页 + 日报填报（解析填入）+ 浏览/批注/回复/已读/通知 + 账号管理支持 daily 账号与小组管理 + e2e 13
 - **第二期（2026-09-13 完成）**：点阵看板（月视图、绿=已交/黄=补交/灰=缺交、点击圆点跳浏览定位）+ 补交提醒横幅（点击跳最早缺交日）+ e2e 14
-- **第三期**：新人周/月报 + mentor 小组/个人报告 + AI 总结/完成度 + 看板 mentor 提交区块 + 划词批注
+- **第三期（2026-09-13 完成）**：新人周/月报（结构与日报相同，键稳定标签随类型切换）+ mentor 小组/个人带教报告（`mentor_reports` 表、两套五段模板、个人报告对象后端强校验）+ AI 总结/完成度（`/reports/{id}/ai-summary` 复用 LlmService，网关未配置时友好报错）+ 看板带教提交区块（周/月报圆点 + 个人报告 x/y）+ 划词批注（正文划选文字生成引用批注）+ mentor 补交提醒（小组周报缺交）+ e2e 15
+
+### 第三期补充决策
+
+- **新人周/月报复用同表同键**：reportType + period 区分（周报=当周五 YYYYMMDD，月报=YYYYMM），sections 键不变，后端零改动
+- **mentor 报告独立表**：两套模板字段差异大，sections JSON 承载；scope=person 时后端校验 target 必须是当前 mentor 所带新人（防越权写评估）
+- **AI 只做单份报告级**：`/reports/{id}/ai-summary` 一次调用产出「总结+完成度评估」两节；小组/全员聚合分析留作后续方向
+- **解析填入规则参数化**：`parseFill.ts` 一套算法三套规则（新人/mentor 小组/mentor 个人），标题同义词覆盖「本周/这周/本月」等
+- **mentor 小组自动识别**：所带新人同组则自动带出，跨组（极端情况）手工选组
 
 ### 第二期补充决策
 
