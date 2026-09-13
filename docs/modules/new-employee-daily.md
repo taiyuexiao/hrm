@@ -1,6 +1,6 @@
 # 新人培养报告（日报/周报/月报）模块
 
-> 状态：✅ 第一期已完成（2026-09-13，e2e 全量回归 24/24 通过）
+> 状态：✅ 第二期已完成（2026-09-13，e2e 全量回归 26/26 通过）
 > UI 原型：`docs/modules/new-employee-daily/prototype.html`（6 屏，浏览器直接打开）
 
 ## 一、模块是什么
@@ -58,24 +58,33 @@
 | POST `/reports/{id}/comments` | 评论/回复（quote、mentions），触发通知 | 登录 |
 | DELETE `/comments/{id}` | 删自己的评论（superadmin 可删任意） | 本人/超管 |
 | POST `/reports/{id}/read` | 上报已读 | 登录 |
+| GET `/dashboard?from=&to=` | 看板数据源：区间内新人报告原始行（已交/补交/缺交判定在前端） | mentor/leader/超管 |
+| GET `/missing?days=N` | 最近 N 天（不含今天）未提交日报的工作日清单 | 仅 newbie |
 
 ## 五、前端结构
 
 - `src/services/dailyApi.ts`：API 客户端
-- `src/components/newbie-daily/`：`DailyApp`（外壳+填报/浏览切换）、`FillView`（五段式+解析填入+自动保存+提交）、`BrowseView`（小组树+报告+评论区）、`ChoosePage`（双系统选择页）
+- `src/components/newbie-daily/`：`DailyApp`（外壳+填报/浏览/看板切换）、`FillView`（五段式+解析填入+自动保存+提交+补交提醒横幅）、`BrowseView`（小组树+报告+评论区，支持看板跳转定位）、`DashboardView`（月视图点阵图）、`ChoosePage`（双系统选择页）
 - 对接点：`App.tsx` 路由 `/daily`、`/choose`；侧边栏「新人报告」（非 daily 角色可见）；`role='daily'` 根路由重定向；双系统账号登录后跳 `/choose`
 
 ## 六、分期
 
-- **第一期（本次）**：账号模型 + 登录分流/选择页 + 日报填报（解析填入）+ 浏览/批注/回复/已读/通知 + 账号管理支持 daily 账号与小组管理 + e2e 13
-- **第二期**：点阵看板 + 补交提醒
-- **第三期**：新人周/月报 + mentor 小组/个人报告 + AI 总结/完成度
+- **第一期（2026-09-13 完成）**：账号模型 + 登录分流/选择页 + 日报填报（解析填入）+ 浏览/批注/回复/已读/通知 + 账号管理支持 daily 账号与小组管理 + e2e 13
+- **第二期（2026-09-13 完成）**：点阵看板（月视图、绿=已交/黄=补交/灰=缺交、点击圆点跳浏览定位）+ 补交提醒横幅（点击跳最早缺交日）+ e2e 14
+- **第三期**：新人周/月报 + mentor 小组/个人报告 + AI 总结/完成度 + 看板 mentor 提交区块 + 划词批注
+
+### 第二期补充决策
+
+- **补交提醒只做登录横幅，不做通知表推送**：横幅由 `/missing` 实时计算，天然去重；推送需要定时任务+已提醒记账，复杂度不值
+- **看板对超管开放**（`role=superadmin` 即使无 daily_role）：便于运维与验收，不破坏"mentor/leader 专属"的业务口径
+- **补交判定规则在前端**（`DashboardView.cellOf`）：`submitted_at` 日期晚于 period 即补交（黄点）；后端只返回原始行，展示规则后续可改不动后端
 
 ## 七、已知限制
 
 - 报告 version 字段只做递增，未做乐观锁校验（单作者场景，冲突概率低）
 - @提醒仅匹配 meta 中的新人与 mentor（领导账号不在 meta 内，@领导暂不触发通知）
 - 法定节假日未处理，工作日=周一至周五
+- 补交提醒无法识别新人入职日期（users 表无创建时间），新账号会把过去 30 天工作日全部计为缺交；入职较早则无影响
 
 ## 八、Bug 与问题记录
 
@@ -86,3 +95,11 @@
 - **不可破坏的行为（回归保护区）**：评论作者身份标签（newbie/mentor/leader/staff）正确；通知仍发给报告作者/被回复者/@提及人
 - **根因**：`Set.of(...)` 创建的不可变集合 `contains(null)` 会抛 NPE，老员工 `dailyRole` 为 null 触发
 - **解决**：判空后再 contains（`DailyReportController.addComment`）。教训：`Set.of`/`List.of` 的 contains/indexOf 对 null 不友好，成员可能为 null 时先判空
+
+### BUG-002 看板跳浏览显示"尚未填写"（2026-09-13 已解决）
+
+- **错误行为**：看板点击历史日期的补交圆点，浏览页定位到该新人该日后显示"尚未填写"，左侧树却显示"已交"
+- **期望行为**：跳转后显示当天日报内容
+- **不可破坏的行为（回归保护区）**：看板→浏览跳转定位功能；浏览页正常的日期切换与新人选择
+- **根因**：竞态——`setDate` 切换周期后 `period` 立即变化，但 `entries` 仍是旧周期数据，跳转定位 effect 在目标周期 feed 返回前就用旧 entries 选中（report 为 null）并消费了 target
+- **解决**：BrowseView 增加 `loadedPeriod` 状态（feed 成功时记录），定位 effect 必须等 `loadedPeriod === period` 才执行选择。教训：异步数据驱动的联动定位，必须确认数据与目标状态同源后再消费跳转参数

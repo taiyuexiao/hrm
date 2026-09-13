@@ -1,11 +1,11 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
-  DatePicker, Button, Tag, Space, message, Popconfirm, Modal, Input, Segmented, Tooltip, Spin,
+  DatePicker, Button, Tag, Space, message, Popconfirm, Modal, Input, Segmented, Tooltip, Spin, Alert,
 } from 'antd';
 import { CheckCircleOutlined, ThunderboltOutlined } from '@ant-design/icons';
 import dayjs, { Dayjs } from 'dayjs';
 import {
-  dailyApi, DAILY_SECTIONS, toPeriod, DailyReport, DailyMeta,
+  dailyApi, DAILY_SECTIONS, toPeriod, DailyReport, DailyMeta, formatPeriod,
 } from '../../services/dailyApi';
 
 const { TextArea } = Input;
@@ -56,10 +56,22 @@ const FillView: React.FC<FillViewProps> = ({ authUser, meta }) => {
   const [parseText, setParseText] = useState('');
   const [parsed, setParsed] = useState<Record<string, string> | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [missingDays, setMissingDays] = useState<string[]>([]);
   const saveTimer = useRef<number | null>(null);
   const dirtyRef = useRef(false);
 
   const period = toPeriod(date.toDate());
+
+  // 补交提醒：最近 30 天内未提交日报的工作日（后端计算，前端只展示）
+  const refreshMissing = useCallback(() => {
+    dailyApi.missing(30).then(res => {
+      if (res.success) setMissingDays(res.missing);
+    }).catch(() => { /* 提醒失败不阻塞填报 */ });
+  }, []);
+
+  useEffect(() => {
+    refreshMissing();
+  }, [refreshMissing]);
 
   const load = useCallback(async (p: string) => {
     setLoading(true);
@@ -139,6 +151,7 @@ const FillView: React.FC<FillViewProps> = ({ authUser, meta }) => {
         const res = await dailyApi.submit(current.report.id);
         if (res.success) {
           setReport(res.report);
+          refreshMissing();
           message.success('日报已提交');
         } else {
           message.error(res.message || '提交失败');
@@ -210,6 +223,27 @@ const FillView: React.FC<FillViewProps> = ({ authUser, meta }) => {
           智能解析填入
         </Button>
       </Space>
+
+      {missingDays.length > 0 && (
+        <Alert
+          type="warning"
+          showIcon
+          style={{ marginBottom: 14 }}
+          message={
+            <span>
+              您还有 <b>{missingDays.length}</b> 个工作日未提交日报（最近 30 天内），最早：
+              <a onClick={() => setDate(dayjs(new Date(
+                +missingDays[0].slice(0, 4),
+                +missingDays[0].slice(4, 6) - 1,
+                +missingDays[0].slice(6, 8),
+              )))}>
+                {formatPeriod(missingDays[0])}
+              </a>
+              ，点击日期补交。
+            </span>
+          }
+        />
+      )}
 
       <Spin spinning={loading}>
         {DAILY_SECTIONS.map((sec, idx) => (

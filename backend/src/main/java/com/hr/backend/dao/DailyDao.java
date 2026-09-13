@@ -163,6 +163,21 @@ public class DailyDao {
         return byUser;
     }
 
+    /** 某用户在周期区间内的全部报告（看板数据源，原始行，状态判定交给前端） */
+    public List<Map<String, Object>> findReportsInRange(String reportType, String from, String to) {
+        return jdbcTemplate.query(
+                "SELECT * FROM newbie_reports WHERE report_type = ? AND period >= ? AND period <= ? AND deleted = 0 ORDER BY period",
+                this::mapReport, reportType, from, to);
+    }
+
+    /** 某用户已提交报告的 period 集合（补交提醒数据源） */
+    public Set<String> findSubmittedPeriods(String username, String reportType) {
+        List<String> rows = jdbcTemplate.queryForList(
+                "SELECT period FROM newbie_reports WHERE username = ? AND report_type = ? AND status = 'submitted' AND deleted = 0",
+                String.class, username, reportType);
+        return new HashSet<>(rows);
+    }
+
     // ========== 评论 ==========
 
     public void insertComment(String id, String reportId, String parentId,

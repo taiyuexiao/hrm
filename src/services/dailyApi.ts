@@ -81,6 +81,22 @@ export interface DailyReader {
   dailyRole?: string;
 }
 
+export interface DashboardReportItem {
+  id: string;
+  period: string;
+  status: 'draft' | 'submitted';
+  submittedAt?: string;
+}
+
+export interface DashboardEntry {
+  username: string;
+  name: string;
+  groupId?: string;
+  groupName?: string;
+  mentorName?: string;
+  reports: DashboardReportItem[];
+}
+
 interface Resp {
   success: boolean;
   message?: string;
@@ -159,4 +175,10 @@ export const dailyApi = {
 
   markRead: (id: string) =>
     request<Resp>(`/daily/reports/${id}/read`, { method: 'POST' }),
+
+  dashboard: (from: string, to: string) =>
+    request<Resp & { entries: DashboardEntry[] }>(`/daily/dashboard?from=${from}&to=${to}`),
+
+  missing: (days = 30) =>
+    request<Resp & { missing: string[] }>(`/daily/missing?days=${days}`),
 };

@@ -30,11 +30,20 @@ function avatarColor(name: string): string {
 interface BrowseViewProps {
   authUser: any;
   meta: DailyMeta | null;
+  /** 看板跳转目标：自动定位到指定新人与周期，定位完成后通过 onTargetConsumed 清除 */
+  target?: { username: string; period: string } | null;
+  onTargetConsumed?: () => void;
 }
 
-const BrowseView: React.FC<BrowseViewProps> = ({ authUser, meta }) => {
+/** YYYYMMDD → Dayjs */
+function periodToDayjs(p: string): Dayjs {
+  return dayjs(new Date(+p.slice(0, 4), +p.slice(4, 6) - 1, +p.slice(6, 8)));
+}
+
+const BrowseView: React.FC<BrowseViewProps> = ({ authUser, meta, target, onTargetConsumed }) => {
   const [date, setDate] = useState<Dayjs>(dayjs());
   const [entries, setEntries] = useState<FeedEntry[]>([]);
+  const [loadedPeriod, setLoadedPeriod] = useState<string | null>(null);
   const [filter, setFilter] = useState<'all' | 'mine'>('all');
   const [selected, setSelected] = useState<string | null>(null);
   const [report, setReport] = useState<DailyReport | null>(null);
@@ -52,7 +61,10 @@ const BrowseView: React.FC<BrowseViewProps> = ({ authUser, meta }) => {
     setLoadingFeed(true);
     try {
       const res = await dailyApi.feed('daily', period);
-      if (res.success) setEntries(res.entries);
+      if (res.success) {
+        setEntries(res.entries);
+        setLoadedPeriod(period);
+      }
     } catch (e: any) {
       message.error('加载列表失败：' + e.message);
     } finally {
@@ -91,6 +103,23 @@ const BrowseView: React.FC<BrowseViewProps> = ({ authUser, meta }) => {
       setReaders([]);
     }
   };
+
+  // 看板跳转：周期不同先切日期（触发 feed 重载），且必须等目标周期的 feed 就绪后再定位，
+  // 否则会拿旧周期的 entries 误判（report 为 null 显示"尚未填写"）
+  useEffect(() => {
+    if (!target) return;
+    if (target.period !== period) {
+      setDate(periodToDayjs(target.period));
+      return;
+    }
+    if (loadedPeriod !== period) return; // 目标周期 feed 尚未返回
+    const entry = entries.find(e => e.username === target.username);
+    if (entry) {
+      handleSelect(entry);
+      onTargetConsumed?.();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [target, entries, loadedPeriod]);
 
   // 评论按楼层组织（一层回复）
   const { topLevel, repliesOf } = useMemo(() => {

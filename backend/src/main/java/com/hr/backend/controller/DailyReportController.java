@@ -308,4 +308,81 @@ public class DailyReportController {
         dailyDao.markRead(id, current.getUsername());
         return ok();
     }
+
+    // ========== 提交看板（mentor / 日报领导 / 超管） ==========
+
+    /**
+     * 看板数据源：区间内全部新人的报告原始行。
+     * 已交/补交/缺交/未到的状态判定由前端完成（便于前端调整展示规则，后端不改）。
+     */
+    @GetMapping("/dashboard")
+    public Map<String, Object> dashboard(@RequestParam String from, @RequestParam String to) {
+        User current = currentUser();
+        if (current == null) return fail("未登录");
+        String dr = current.getDailyRole();
+        boolean canView = "mentor".equals(dr) || "leader".equals(dr) || "superadmin".equals(current.getRole());
+        if (!canView) return fail("无权限：看板仅带教老师与领导可见");
+        if (!from.matches("\\d{8}") || !to.matches("\\d{8}")) return fail("参数不合法（from/to 应为 YYYYMMDD）");
+
+        Map<String, List<Map<String, Object>>> byUser = new LinkedHashMap<>();
+        for (Map<String, Object> r : dailyDao.findReportsInRange("daily", from, to)) {
+            byUser.computeIfAbsent((String) r.get("username"), k -> new ArrayList<>()).add(r);
+        }
+        Map<String, String> groupNames = groupNameMap();
+
+        List<Map<String, Object>> entries = new ArrayList<>();
+        for (User u : userDao.findAll()) {
+            if (!"newbie".equals(u.getDailyRole())) continue;
+            Map<String, Object> e = new LinkedHashMap<>();
+            e.put("username", u.getUsername());
+            e.put("name", u.getName());
+            e.put("groupId", u.getGroupId());
+            e.put("groupName", u.getGroupId() != null ? groupNames.get(u.getGroupId()) : null);
+            if (u.getMentor() != null) {
+                User mentor = userDao.findByUsername(u.getMentor());
+                e.put("mentorName", mentor != null ? mentor.getName() : u.getMentor());
+            }
+            List<Map<String, Object>> reports = new ArrayList<>();
+            for (Map<String, Object> r : byUser.getOrDefault(u.getUsername(), List.of())) {
+                Map<String, Object> item = new LinkedHashMap<>();
+                item.put("id", r.get("id"));
+                item.put("period", r.get("period"));
+                item.put("status", r.get("status"));
+                item.put("submittedAt", r.get("submittedAt"));
+                reports.add(item);
+            }
+            e.put("reports", reports);
+            entries.add(e);
+        }
+        Map<String, Object> r = ok();
+        r.put("entries", entries);
+        return r;
+    }
+
+    // ========== 补交提醒（新人） ==========
+
+    /** 最近 N 天内（不含今天）未提交日报的工作日清单，旧的在前 */
+    @GetMapping("/missing")
+    public Map<String, Object> missing(@RequestParam(defaultValue = "30") int days) {
+        User current = currentUser();
+        if (current == null) return fail("未登录");
+        if (!"newbie".equals(current.getDailyRole())) return fail("仅新人账号有此数据");
+        days = Math.min(Math.max(days, 1), 90);
+
+        Set<String> submitted = dailyDao.findSubmittedPeriods(current.getUsername(), "daily");
+        List<String> missing = new ArrayList<>();
+        java.time.LocalDate d = java.time.LocalDate.now().minusDays(1);
+        for (int i = 0; i < days; i++) {
+            java.time.DayOfWeek w = d.getDayOfWeek();
+            if (w != java.time.DayOfWeek.SATURDAY && w != java.time.DayOfWeek.SUNDAY) {
+                String p = d.format(java.time.format.DateTimeFormatter.BASIC_ISO_DATE);
+                if (!submitted.contains(p)) missing.add(p);
+            }
+            d = d.minusDays(1);
+        }
+        Collections.reverse(missing);
+        Map<String, Object> r = ok();
+        r.put("missing", missing);
+        return r;
+    }
 }
