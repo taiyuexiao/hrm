@@ -271,7 +271,7 @@ export const authApi = {
     request<{ success: boolean; message?: string }>(`/auth/users/${username}`, {
       method: 'DELETE',
     }),
-  updateUser: (username: string, data: { newUsername?: string; name?: string; role?: string }) =>
+  updateUser: (username: string, data: { newUsername?: string; name?: string; role?: string; dept?: string }) =>
     request<{ success: boolean; message?: string }>(`/auth/users/${username}`, {
       method: 'PUT',
       body: JSON.stringify(data),

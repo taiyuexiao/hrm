@@ -42,5 +42,7 @@ com/hr/backend/service/CommentService$1.class
 com/hr/backend/dto/AiGlobalAnalysisRequest.class
 com/hr/backend/dto/AiGlobalAnalysisRequest$DeptReport.class
 com/hr/backend/service/ReportService$2.class
+com/hr/backend/dao/DeptDao.class
+com/hr/backend/controller/DeptController.class
 com/hr/backend/controller/ReportController$2.class
 com/hr/backend/service/SuggestionService.class

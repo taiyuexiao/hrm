@@ -12,11 +12,11 @@ public class PermissionChecker {
             "20260327", "20260410", "20260417", "20260515", "20260522"
     );
 
-    // 系统管理员（超级管理员）：仅 33528，作为最后的兜底保护
+    // 超级管理员：role = superadmin 的账号均视为系统管理员（拥有全部权限的兜底）
     public static boolean isSuperAdmin(Map<String, Object> currentUser) {
         if (currentUser == null) return false;
-        String username = (String) currentUser.get("username");
-        return "33528".equals(username);
+        String role = (String) currentUser.get("role");
+        return "superadmin".equals(role);
     }
 
     // 管理员：可编辑任意部门任意周期周报，但不能管理用户/权限（除 33528 外）

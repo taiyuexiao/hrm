@@ -29,6 +29,7 @@ import SuggestionBoxPage from './components/admin/SuggestionBoxPage';
 import RecycleBinPage from './components/admin/RecycleBinPage';
 import PermissionManager from './components/permission-manager/PermissionManager';
 import { authApi } from './services/api';
+import { loadDepts } from './services/deptStore';
 import { getApiBaseUrl, getAppBasePath } from './config/app';
 import { validatePassword, PASSWORD_RULE_HINT } from './utils/password';
 
@@ -153,6 +154,12 @@ function AppContent() {
     const timer = setInterval(loadNotices, 30000);
     return () => clearInterval(timer);
   }, [loadNotices]);
+
+  // 启动时拉取动态科室清单（失败回落到内置清单，不阻塞渲染）
+  useEffect(() => {
+    if (authUser) loadDepts();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const [settingOpen, setSettingOpen] = useState(false);
   const [darkMode, setDarkMode] = useState(false);
@@ -359,7 +366,7 @@ function AppContent() {
                 label: <Link to="/admin/action-logs">行为日志</Link>,
               },
             ] : []),
-            ...(authUser?.username === '33528' ? [
+            ...(authUser?.role === 'superadmin' ? [
               {
                 key: 'suggestions',
                 icon: <MessageOutlined />,

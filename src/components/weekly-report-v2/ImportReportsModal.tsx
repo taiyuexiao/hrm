@@ -4,7 +4,8 @@ import {
 } from 'antd';
 import { InboxOutlined, DownloadOutlined } from '@ant-design/icons';
 import * as XLSX from 'xlsx';
-import { DEPTS, TaskItem, WeeklyReport } from './types';
+import { TaskItem, WeeklyReport } from './types';
+import { getDeptsSnapshot } from '../../services/deptStore';
 import {
   genId, getCurrentUser, getNextWeekLabel, getReport, isFrozenWeek, saveReport,
   isAdmin, isSuperAdmin,
@@ -43,13 +44,14 @@ interface ImportReportsModalProps {
 function normalizeDept(raw: string): string | null {
   const s = String(raw || '').trim();
   if (!s) return null;
-  const exact = DEPTS.find(d => d === s);
+  const depts = getDeptsSnapshot();
+  const exact = depts.find(d => d === s);
   if (exact) return exact;
-  const contained = DEPTS.filter(d => s.includes(d));
+  const contained = depts.filter(d => s.includes(d));
   if (contained.length > 0) {
     return contained.sort((a, b) => b.length - a.length)[0];
   }
-  const contains = DEPTS.filter(d => d.includes(s));
+  const contains = depts.filter(d => d.includes(s));
   if (contains.length === 1) return contains[0];
   return null;
 }

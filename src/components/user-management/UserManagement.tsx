@@ -2,9 +2,10 @@ import React, { useState, useEffect, useCallback } from 'react';
 import {
   Modal, Table, Button, Form, Input, Select, message, Popconfirm, Space, Tag,
 } from 'antd';
-import { PlusOutlined, LockOutlined, DeleteOutlined, EditOutlined, EyeOutlined, EyeInvisibleOutlined } from '@ant-design/icons';
+import { PlusOutlined, LockOutlined, DeleteOutlined, EditOutlined, EyeOutlined, EyeInvisibleOutlined, TeamOutlined } from '@ant-design/icons';
 import { authApi } from '../../services/api';
-import { DEPTS, ROLE_LABELS, UserRole } from '../weekly-report-v2/types';
+import { useDepts, useDeptItems, createDept } from '../../services/deptStore';
+import { ROLE_LABELS, UserRole } from '../weekly-report-v2/types';
 
 interface UserMgmtProps {
   open: boolean;
@@ -22,6 +23,13 @@ const UserManagement: React.FC<UserMgmtProps> = ({ open, onClose }) => {
   const [editField, setEditField] = useState<'username' | 'name'>('name');
   const [roleOpen, setRoleOpen] = useState(false);
   const [roleTarget, setRoleTarget] = useState<any>(null);
+  const [deptEditOpen, setDeptEditOpen] = useState(false);
+  const [deptEditTarget, setDeptEditTarget] = useState<any>(null);
+  const [deptMgmtOpen, setDeptMgmtOpen] = useState(false);
+  const [newDeptName, setNewDeptName] = useState('');
+  const [deptCreating, setDeptCreating] = useState(false);
+  const deptList = useDepts();
+  const deptItems = useDeptItems();
   const [hovered, setHovered] = useState<string | null>(null);
   const [visiblePwds, setVisiblePwds] = useState<Set<string>>(new Set());
 
@@ -40,6 +48,7 @@ const UserManagement: React.FC<UserMgmtProps> = ({ open, onClose }) => {
   const [resetForm] = Form.useForm();
   const [editForm] = Form.useForm();
   const [roleForm] = Form.useForm();
+  const [deptForm] = Form.useForm();
 
   const loadUsers = useCallback(async () => {
     setLoading(true);
@@ -161,6 +170,51 @@ const UserManagement: React.FC<UserMgmtProps> = ({ open, onClose }) => {
     }
   };
 
+  const handleEditDept = (record: any) => {
+    setDeptEditTarget(record);
+    deptForm.setFieldsValue({ dept: record.dept });
+    setDeptEditOpen(true);
+  };
+
+  const handleUpdateDept = async (values: any) => {
+    if (!deptEditTarget) return;
+    try {
+      const res = await authApi.updateUser(deptEditTarget.username, { dept: values.dept });
+      if (res.success) {
+        message.success('科室已更新');
+        setDeptEditOpen(false);
+        deptForm.resetFields();
+        loadUsers();
+      } else {
+        message.error(res.message || '科室更新失败');
+      }
+    } catch (e: any) {
+      message.error(`科室更新失败: ${e.message}`);
+    }
+  };
+
+  const handleCreateDept = async () => {
+    const name = newDeptName.trim();
+    if (!name) {
+      message.warning('请输入科室名称');
+      return;
+    }
+    setDeptCreating(true);
+    try {
+      const res = await createDept(name);
+      if (res.success) {
+        message.success(`科室「${name}」创建成功`);
+        setNewDeptName('');
+      } else {
+        message.error(res.message || '创建失败');
+      }
+    } catch (e: any) {
+      message.error(`创建失败: ${e.message}`);
+    } finally {
+      setDeptCreating(false);
+    }
+  };
+
   const EditableCell = ({ text, record, field }: { text: string; record: any; field: 'username' | 'name' }) => {
     const hoverKey = `${record.username}-${field}`;
     return (
@@ -208,7 +262,17 @@ const UserManagement: React.FC<UserMgmtProps> = ({ open, onClose }) => {
         );
       },
     },
-    { title: '部门', dataIndex: 'dept', key: 'dept' },
+    {
+      title: '部门',
+      dataIndex: 'dept',
+      key: 'dept',
+      render: (dept: string, record: any) => (
+        <span style={{ cursor: 'pointer' }} onClick={() => handleEditDept(record)}>
+          {dept || '-'}
+          <EditOutlined style={{ marginLeft: 6, color: '#1890ff', fontSize: 12 }} />
+        </span>
+      ),
+    },
     {
       title: '密码',
       dataIndex: 'passwordPlain',
@@ -285,7 +349,10 @@ const UserManagement: React.FC<UserMgmtProps> = ({ open, onClose }) => {
         width={960}
         footer={null}
       >
-        <div style={{ marginBottom: 16, textAlign: 'right' }}>
+        <div style={{ marginBottom: 16, display: 'flex', justifyContent: 'space-between' }}>
+          <Button icon={<TeamOutlined />} onClick={() => setDeptMgmtOpen(true)}>
+            科室管理
+          </Button>
           <Button type="primary" icon={<PlusOutlined />} onClick={() => setCreateOpen(true)}>
             新增账号
           </Button>
@@ -328,8 +395,12 @@ const UserManagement: React.FC<UserMgmtProps> = ({ open, onClose }) => {
               ]}
             />
           </Form.Item>
-          <Form.Item name="dept" label="部门" initialValue={DEPTS[0]}>
-            <Select options={DEPTS.map(d => ({ label: d, value: d }))} />
+          <Form.Item name="dept" label="部门" initialValue={deptList[0]}>
+            <Select
+              showSearch
+              optionFilterProp="label"
+              options={deptList.map(d => ({ label: d, value: d }))}
+            />
           </Form.Item>
         </Form>
       </Modal>
@@ -398,6 +469,70 @@ const UserManagement: React.FC<UserMgmtProps> = ({ open, onClose }) => {
             />
           </Form.Item>
         </Form>
+      </Modal>
+
+      {/* 改派科室 */}
+      <Modal
+        title={`改派科室 - ${deptEditTarget?.name}`}
+        open={deptEditOpen}
+        onCancel={() => { setDeptEditOpen(false); deptForm.resetFields(); }}
+        onOk={() => deptForm.submit()}
+        okText="保存"
+        cancelText="取消"
+      >
+        <Form form={deptForm} layout="vertical" onFinish={handleUpdateDept}>
+          <Form.Item
+            name="dept"
+            label="科室"
+            rules={[{ required: true, message: '请选择科室' }]}
+          >
+            <Select
+              showSearch
+              optionFilterProp="label"
+              options={deptList.map(d => ({ label: d, value: d }))}
+            />
+          </Form.Item>
+        </Form>
+      </Modal>
+
+      {/* 科室管理 */}
+      <Modal
+        title="科室管理"
+        open={deptMgmtOpen}
+        onCancel={() => setDeptMgmtOpen(false)}
+        footer={null}
+        width={520}
+      >
+        <Space.Compact style={{ width: '100%', marginBottom: 16 }}>
+          <Input
+            placeholder="输入新科室名称，如：运维管理部"
+            value={newDeptName}
+            onChange={e => setNewDeptName(e.target.value)}
+            onPressEnter={handleCreateDept}
+            maxLength={30}
+          />
+          <Button type="primary" icon={<PlusOutlined />} loading={deptCreating} onClick={handleCreateDept}>
+            新增科室
+          </Button>
+        </Space.Compact>
+        <Table
+          dataSource={deptItems}
+          rowKey="name"
+          size="small"
+          pagination={false}
+          columns={[
+            { title: '科室名称', dataIndex: 'name', key: 'name' },
+            {
+              title: '创建时间',
+              dataIndex: 'createdAt',
+              key: 'createdAt',
+              render: (v?: string) => (v ? v.slice(0, 10) : '-'),
+            },
+          ]}
+        />
+        <div style={{ marginTop: 8, fontSize: 12, color: '#999' }}>
+          新科室会立即出现在周报科室栏与「新增账号」的部门下拉中；暂不支持删除/改名（避免历史周报数据成为孤儿）。
+        </div>
       </Modal>
     </>
   );

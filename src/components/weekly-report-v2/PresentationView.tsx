@@ -9,7 +9,8 @@ import {
   MessageOutlined, LeftOutlined, RightOutlined, CommentOutlined,
   CheckCircleOutlined,
 } from '@ant-design/icons';
-import { WeeklyReport, DEPTS, TaskItem, Comment as ReportComment, Reply, SYSTEM_USERS } from './types';
+import { WeeklyReport, TaskItem, Comment as ReportComment, Reply, SYSTEM_USERS } from './types';
+import { useDepts, getDeptsSnapshot } from '../../services/deptStore';
 import {
   getCurrentUser,
   formatWeekLabel, getDynamicWeekOptions, loadReports,
@@ -411,6 +412,7 @@ function TextContent({
 const PresentationView: React.FC = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const currentUser = useMemo(() => getCurrentUser(), []);
+  const deptList = useDepts();
 
   const urlWeek = searchParams.get('weekLabel');
   const urlDept = searchParams.get('dept');
@@ -418,8 +420,15 @@ const PresentationView: React.FC = () => {
     urlWeek && /^\d{8}$/.test(urlWeek) ? urlWeek : ''
   );
   const [selectedDept, setSelectedDept] = useState(
-    urlDept && DEPTS.includes(urlDept) ? urlDept : currentUser.dept
+    urlDept && getDeptsSnapshot().includes(urlDept) ? urlDept : currentUser.dept
   );
+  // 科室清单异步加载完成后，补应用 URL 指定的新科室（深链接场景）
+  useEffect(() => {
+    if (urlDept && deptList.includes(urlDept) && selectedDept !== urlDept) {
+      setSelectedDept(urlDept);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [deptList]);
 
   const [report, setReport] = useState<WeeklyReport | null>(null);
   const [loading, setLoading] = useState(false);
@@ -906,7 +915,7 @@ const PresentationView: React.FC = () => {
           <div style={{ padding: '14px 16px', borderBottom: '1px solid #f0f0f0', background: '#fafafa' }}>
             <Text strong style={{ fontSize: 14 }}>科室列表</Text>
           </div>
-          {DEPTS.map(dept => (
+          {deptList.map(dept => (
             <div
               key={dept}
               onClick={() => setSelectedDept(dept)}

@@ -19,6 +19,9 @@ public class AuthController {
     private UserDao userDao;
 
     @Autowired
+    private com.hr.backend.dao.DeptDao deptDao;
+
+    @Autowired
     private JwtUtils jwtUtils;
 
     @Autowired
@@ -154,11 +157,16 @@ public class AuthController {
         return result;
     }
 
-    // ========== 账号管理（仅系统管理员 33528） ==========
+    // ========== 账号/权限管理（superadmin 角色或对应管理权限码） ==========
 
+    // 根账号保护：33528 的角色与核心管理权限不可被修改，防止系统失去最后一个管理员
     private static final String SUPER_ADMIN = "33528";
 
-    private Map<String, Object> checkSuperAdmin() {
+    /**
+     * 管理端点鉴权：superadmin 角色直接放行，其他角色需持有对应权限码
+     *（USER_MANAGE / PERMISSION_MANAGE），与前端菜单的 USER_MANAGE 门槛一致。
+     */
+    private Map<String, Object> checkManagePermission(String permCode) {
         Map<String, Object> result = new HashMap<>();
         var authentication = SecurityContextHolder.getContext().getAuthentication();
         if (authentication == null || !authentication.isAuthenticated() || "anonymousUser".equals(authentication.getName())) {
@@ -167,8 +175,10 @@ public class AuthController {
             result.put("message", "未登录");
             return result;
         }
-        String username = authentication.getName();
-        if (!SUPER_ADMIN.equals(username)) {
+        User current = userDao.findByUsername(authentication.getName());
+        boolean ok = current != null && ("superadmin".equals(current.getRole())
+                || (current.getPermissions() != null && current.getPermissions().contains(permCode)));
+        if (!ok) {
             result.put("success", false);
             result.put("message", "无权限，仅系统管理员可操作");
             return result;
@@ -179,7 +189,7 @@ public class AuthController {
 
     @GetMapping("/users")
     public Map<String, Object> listUsers() {
-        Map<String, Object> check = checkSuperAdmin();
+        Map<String, Object> check = checkManagePermission("USER_MANAGE");
         if (!(Boolean) check.get("success")) return check;
 
         Map<String, Object> result = new HashMap<>();
@@ -204,7 +214,7 @@ public class AuthController {
 
     @PostMapping("/users")
     public Map<String, Object> createUser(@RequestBody User user) {
-        Map<String, Object> check = checkSuperAdmin();
+        Map<String, Object> check = checkManagePermission("USER_MANAGE");
         if (!(Boolean) check.get("success")) return check;
 
         Map<String, Object> result = new HashMap<>();
@@ -240,6 +250,14 @@ public class AuthController {
             return result;
         }
 
+        // 普通用户的科室必须是已登记的科室（leader/admin 的归属如「总经理室」「系统管理员」不在科室表内）
+        if ("user".equals(user.getRole()) && user.getDept() != null && !user.getDept().isEmpty()
+                && !deptDao.exists(user.getDept())) {
+            result.put("success", false);
+            result.put("message", "科室不存在，请先在科室管理中创建");
+            return result;
+        }
+
         // 新用户分配默认权限
         if (user.getPermissions() == null) {
             user.setPermissions(getDefaultPermissions(user.getRole()));
@@ -253,13 +271,14 @@ public class AuthController {
 
     @PutMapping("/users/{username}")
     public Map<String, Object> updateUserInfo(@PathVariable String username, @RequestBody Map<String, String> body) {
-        Map<String, Object> check = checkSuperAdmin();
+        Map<String, Object> check = checkManagePermission("USER_MANAGE");
         if (!(Boolean) check.get("success")) return check;
 
         Map<String, Object> result = new HashMap<>();
         String newUsername = body.get("newUsername");
         String newName = body.get("name");
         String newRole = body.get("role");
+        String newDept = body.get("dept");
 
         User user = userDao.findByUsername(username);
         if (user == null) {
@@ -305,6 +324,18 @@ public class AuthController {
             changed = true;
         }
 
+        // 改派科室（普通用户的科室必须在科室表内）
+        if (newDept != null && !newDept.equals(user.getDept())) {
+            String effectiveRole = user.getRole();
+            if ("user".equals(effectiveRole) && !newDept.isEmpty() && !deptDao.exists(newDept)) {
+                result.put("success", false);
+                result.put("message", "科室不存在，请先在科室管理中创建");
+                return result;
+            }
+            user.setDept(newDept);
+            changed = true;
+        }
+
         if (changed) {
             userDao.updateUser(user);
         }
@@ -316,7 +347,7 @@ public class AuthController {
 
     @DeleteMapping("/users/{username}")
     public Map<String, Object> deleteUser(@PathVariable String username) {
-        Map<String, Object> check = checkSuperAdmin();
+        Map<String, Object> check = checkManagePermission("USER_MANAGE");
         if (!(Boolean) check.get("success")) return check;
 
         Map<String, Object> result = new HashMap<>();
@@ -362,7 +393,7 @@ public class AuthController {
     @PostMapping("/users/{username}/reset-password")
     public Map<String, Object> resetPassword(@PathVariable String username, @RequestBody Map<String, String> request,
                                              HttpServletRequest httpRequest) {
-        Map<String, Object> check = checkSuperAdmin();
+        Map<String, Object> check = checkManagePermission("USER_MANAGE");
         if (!(Boolean) check.get("success")) return check;
 
         Map<String, Object> result = new HashMap<>();
@@ -411,13 +442,13 @@ public class AuthController {
         return ip;
     }
 
-    // ========== 权限管理（仅系统管理员 33528） ==========
+    // ========== 权限管理（superadmin 角色或 PERMISSION_MANAGE 权限） ==========
 
     @PostMapping("/users/{username}/permissions")
     public Map<String, Object> updatePermissions(
             @PathVariable String username,
             @RequestBody Map<String, Object> body) {
-        Map<String, Object> check = checkSuperAdmin();
+        Map<String, Object> check = checkManagePermission("PERMISSION_MANAGE");
         if (!(Boolean) check.get("success")) return check;
 
         Map<String, Object> result = new HashMap<>();

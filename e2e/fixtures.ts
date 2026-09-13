@@ -10,6 +10,12 @@ export const TEST_WEEK = '20260904';          // 专用测试周期（未来周�
 export const TEST_DEPT = '综合管理部';
 export const ACCOUNT = { username: 'e2e_test', password: 'E2e@test123' };
 
+/** 超管测试账号：用户名/密码均可通过环境变量覆盖（33528 已被删除后本地用 308193） */
+export const SUPER_ACCOUNT = {
+  username: process.env.E2E_SUPER_USERNAME || '33528',
+  password: process.env.E2E_SUPER_PASSWORD,
+};
+
 const DB_PATH = path.resolve(__dirname, '../backend/data/hr.db');
 
 /** 通过后端登录接口拿 token（跳过 UI 登录，快且稳） */
@@ -35,13 +41,29 @@ export async function injectAuth(page: Page, token: string, user: any) {
   );
 }
 
+/** 未来第 N 个周五的周期标签（YYYYMMDD）。用于周期管理测试：仅未来周可被普通管理员删除 */
+export function futureFridayLabel(weeksAhead = 1): string {
+  const now = new Date();
+  const day = now.getDay() || 7; // Mon=1 ... Sun=7
+  const offset = ((5 - day + 7) % 7) + weeksAhead * 7;
+  const d = new Date(now);
+  d.setDate(now.getDate() + offset);
+  const p = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}`;
+}
+
+/** 20260904 → 2026-09-04 */
+export function toDashLabel(week: string): string {
+  return `${week.slice(0, 4)}-${week.slice(4, 6)}-${week.slice(6, 8)}`;
+}
+
 /** 创建测试周期（一个科室一条空周报即可让周期出现在下拉框） */
-export async function createTestWeek(req: APIRequestContext, token: string) {
+export async function createTestWeek(req: APIRequestContext, token: string, week = TEST_WEEK) {
   const resp = await req.post(`${API}/reports`, {
     headers: { Authorization: `Bearer ${token}` },
     data: {
-      id: `${TEST_WEEK}-${TEST_DEPT}`,
-      weekLabel: TEST_WEEK,
+      id: `${week}-${TEST_DEPT}`,
+      weekLabel: week,
       dept: TEST_DEPT,
       authorId: 'e2e',
       authorName: 'E2E测试',
@@ -58,13 +80,13 @@ export async function createTestWeek(req: APIRequestContext, token: string) {
 }
 
 /** 清理测试周期：软删除 + 直接清库（连回收站残留一起清，仅本地 dev 环境） */
-export async function cleanupTestWeek(req: APIRequestContext, token: string) {
-  await req.delete(`${API}/reports/${TEST_WEEK}`, {
+export async function cleanupTestWeek(req: APIRequestContext, token: string, week = TEST_WEEK) {
+  await req.delete(`${API}/reports/${week}`, {
     headers: { Authorization: `Bearer ${token}` },
   }).catch(() => {});
   try {
     execSync(
-      `sqlite3 "${DB_PATH}" "DELETE FROM weekly_reports WHERE week_label='${TEST_WEEK}'; DELETE FROM comments WHERE report_id LIKE '${TEST_WEEK}%';"`,
+      `sqlite3 "${DB_PATH}" "DELETE FROM weekly_reports WHERE week_label='${week}'; DELETE FROM comments WHERE report_id LIKE '${week}%';"`,
     );
   } catch {
     // 无 sqlite3 或清理失败不阻塞测试
@@ -83,11 +105,12 @@ export async function setReactInput(page: Page, target: string | Locator, value:
   }, value);
 }
 
-/** 打开周下拉框并选择指定周（如 2026-09-04） */
+/** 打开周下拉框并选择指定周（如 2026-09-04）。下拉为虚拟滚动，目标项未必已渲染，统一走搜索过滤定位 */
 export async function selectWeek(page: Page, weekText: string) {
   const sel = page.locator('.ant-select .ant-select-selector').first();
   await sel.dispatchEvent('mousedown');
-  await page.locator('.custom-week-option', { hasText: weekText }).first().click();
+  await page.keyboard.type(weekText);
+  await page.locator('.ant-select-item-option', { hasText: weekText }).first().click();
   await expect(page.locator('.ant-select-selection-item').first()).toHaveText(weekText);
 }
 

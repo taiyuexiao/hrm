@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Table, Button, Tag, Space, message, Card, Select, Typography } from 'antd';
 import { ReloadOutlined } from '@ant-design/icons';
-import { DEPTS } from '../weekly-report-v2/types';
+import { useDepts } from '../../services/deptStore';
 import { initDemoData, getReports } from '../weekly-report-v2/data';
 
 const { Text } = Typography;
@@ -49,6 +49,7 @@ interface ReportRow {
 }
 
 const ReportManagement: React.FC = () => {
+  const deptList = useDepts();
   const [reports, setReports] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [selectedWeek, setSelectedWeek] = useState<string>(getCurrentFridayWeekLabel());
@@ -99,7 +100,7 @@ const ReportManagement: React.FC = () => {
     const weekReports = reports.filter(r => r.weekLabel === selectedWeek);
     const reportMap = new Map(weekReports.map((r: any) => [r.dept, r]));
 
-    return DEPTS.map(dept => {
+    return deptList.map(dept => {
       const report = reportMap.get(dept);
       const submitted = isActuallySubmitted(report);
       const count = report?.submissions?.length || 0;
@@ -114,7 +115,7 @@ const ReportManagement: React.FC = () => {
         hasData: !!report,
       };
     });
-  }, [reports, selectedWeek]);
+  }, [reports, selectedWeek, deptList]);
 
   const submittedCount = dataSource.filter(d => d.submitted).length;
   const unsubmittedDepts = dataSource.filter(d => !d.submitted).map(d => d.dept);
@@ -176,7 +177,7 @@ const ReportManagement: React.FC = () => {
         <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
           <span style={{ fontSize: 18, fontWeight: 700 }}>📊 周报提交管理</span>
           <Space size={12}>
-            <Tag color="success">已提交 {submittedCount}/{DEPTS.length}</Tag>
+            <Tag color="success">已提交 {submittedCount}/{deptList.length}</Tag>
             {unsubmittedDepts.length > 0 && (
               <Tag color="error">未提交 {unsubmittedDepts.length} 个部门</Tag>
             )}

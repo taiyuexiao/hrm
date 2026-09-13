@@ -227,20 +227,16 @@
   background: rgba(150, 150, 200, 0.5);
 }
 
-/* 自定义周报周期下拉框 */
-.custom-week-dropdown {
-  max-height: 300px;
-  overflow-y: auto;
+/* 周报周期下拉选项行（原生虚拟滚动 + optionRender 定制内容，
+   悬停/选中高亮由 antd 原生选项样式负责） */
+.week-option-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
 }
 
-.custom-week-option {
-  transition: background 0.2s;
-}
-
-.custom-week-option:hover {
-  background: #f5f5f5 !important;
-}
-
-.custom-week-option.selected:hover {
-  background: #e6f7ff !important;
+.week-option-delete {
+  color: #ff4d4f;
+  padding: 4px;
+  margin-right: -4px;
 }

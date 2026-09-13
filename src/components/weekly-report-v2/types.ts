@@ -350,6 +350,8 @@ export const SYSTEM_USERS: User[] = [
   },
 ];
 
+// 历史硬编码科室清单：现仅作为 deptStore 拉取后端 /api/depts 失败时的 fallback，
+// 业务代码请使用 src/services/deptStore.ts 的 useDepts()/getDeptsSnapshot()
 export const DEPTS = [
   '综合管理部',
   '数据治理部',

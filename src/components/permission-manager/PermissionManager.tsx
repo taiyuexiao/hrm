@@ -222,7 +222,7 @@ const PermissionManager: React.FC = () => {
         <div>
           <h2 style={{ margin: 0 }}>权限管理</h2>
           <p style={{ margin: '4px 0 0', color: '#888', fontSize: 13 }}>
-            仅系统管理员（33528）可操作。基础权限由角色自动赋予，此处只管理额外的特殊权限覆盖。
+            仅系统管理员（superadmin 角色）可操作。基础权限由角色自动赋予，此处只管理额外的特殊权限覆盖。
           </p>
         </div>
         <Space>

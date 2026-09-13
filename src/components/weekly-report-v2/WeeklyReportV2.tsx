@@ -20,7 +20,8 @@ import {
   SendOutlined, LockOutlined, UnlockOutlined, HistoryOutlined,
   ClockCircleOutlined, CloseOutlined, UploadOutlined, SnippetsOutlined,
 } from '@ant-design/icons';
-import { WeeklyReport, User, SYSTEM_USERS, DEPTS, SORTED_DEPTS, sortByDeptOrder, Comment, TaskItem } from './types';
+import { WeeklyReport, User, SYSTEM_USERS, sortByDeptOrder, Comment, TaskItem } from './types';
+import { useDepts, getDeptsSnapshot } from '../../services/deptStore';
 import {
   getCurrentUser, getReport, getReports, saveReport,
   canEditDept, genId, initDemoData, getPrevWeekReport, parsePlanToTasks, DEFAULT_WEEK,
@@ -304,6 +305,7 @@ function parseDateLabel(label: string): Date | null {
 const WeeklyReportV2: React.FC = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const [currentUser] = useState<User>(getCurrentUser());
+  const deptList = useDepts();
   // 从 URL query 参数初始化周次和部门（支持从通知消息跳转）
   const urlWeek = searchParams.get('weekLabel');
   const urlDept = searchParams.get('dept');
@@ -311,12 +313,15 @@ const WeeklyReportV2: React.FC = () => {
     urlWeek && /^\d{8}$/.test(urlWeek) ? urlWeek : DEFAULT_WEEK
   );
   // 允许所有用户选择任何部门查看，默认显示自己的部门
-  // 如果用户部门不在 DEPTS 中（如总经理室），默认显示第一个有数据的部门
-  const [selectedDept, setSelectedDept] = useState(
-    urlDept && DEPTS.includes(urlDept) ? urlDept : (DEPTS.includes(currentUser.dept) ? currentUser.dept : DEPTS[0])
-  );
+  // 如果用户部门不在科室清单中（如总经理室），默认显示第一个科室
+  const [selectedDept, setSelectedDept] = useState(() => {
+    const depts = getDeptsSnapshot();
+    return urlDept && depts.includes(urlDept) ? urlDept : (depts.includes(currentUser.dept) ? currentUser.dept : depts[0]);
+  });
 
   // 监听 URL 参数变化（支持从通知消息跳转，即使用户已在当前页面）
+  // dept 白名单依赖动态科室清单：清单未加载完成前不清除 dept 参数，
+  // 否则指向新科室的深链接会在 loadDepts 完成前被误判为非法而丢弃
   useEffect(() => {
     const week = searchParams.get('weekLabel');
     const dept = searchParams.get('dept');
@@ -324,15 +329,19 @@ const WeeklyReportV2: React.FC = () => {
     if (week && /^\d{8}$/.test(week) && !isWeekInRecycleBin(week)) {
       setSelectedWeek(week);
     }
-    if (dept && DEPTS.includes(dept)) {
+    const deptMatched = !!dept && deptList.includes(dept);
+    if (deptMatched) {
       setSelectedDept(dept);
     }
-    // 清除 URL 参数避免刷新时再次跳回
-    if (week || dept) {
-      setSearchParams({}, { replace: true });
+    // 已应用的参数立即清除避免刷新时再次跳回；dept 未匹配时保留等待清单加载
+    if (week || deptMatched) {
+      const next = new URLSearchParams(searchParams);
+      next.delete('weekLabel');
+      if (deptMatched) next.delete('dept');
+      setSearchParams(next, { replace: true });
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchParams]);
+  }, [searchParams, deptList]);
   const [report, setReport] = useState<WeeklyReport | null>(null);
   const [nextPlanTasks, setNextPlanTasks] = useState<TaskItem[]>([]);
   const [saving, setSaving] = useState(false);
@@ -1528,6 +1537,19 @@ const WeeklyReportV2: React.FC = () => {
     setDeleteModalVisible(true);
   }, []);
 
+  // 周期下拉选项（memo 缓存，避免每次渲染重建）
+  const weekSelectOptions = useMemo(
+    () => weekOptions.map(w => ({ label: formatWeekLabel(w), value: w })),
+    [weekOptions]
+  );
+
+  // 同时匹配格式化标签（2026-07-02）和原始值（20260702）
+  const filterWeekOption = useCallback(
+    (input: string, option?: { label: string; value: string }) =>
+      !!option && (option.label.includes(input) || option.value.includes(input)),
+    []
+  );
+
   const handleDeleteConfirm = useCallback(async () => {
     if (!deleteWeekLabel) return;
     try {
@@ -1958,45 +1980,31 @@ const WeeklyReportV2: React.FC = () => {
               value={selectedWeek}
               onChange={setSelectedWeek}
               style={{ width: 180 }}
-              options={weekOptions.map(w => ({ label: formatWeekLabel(w), value: w }))}
-              dropdownRender={() => (
-                <div className="custom-week-dropdown">
-                  {weekOptions.map(w => {
-                    const deletable = canDeleteWeek(w);
-                    const selected = w === selectedWeek;
-                    return (
-                      <div
-                        key={w}
-                        className={`custom-week-option ${selected ? 'selected' : ''}`}
-                        onClick={() => setSelectedWeek(w)}
-                        style={{
-                          display: 'flex',
-                          justifyContent: 'space-between',
-                          alignItems: 'center',
-                          padding: '8px 12px',
-                          cursor: 'pointer',
-                          background: selected ? '#e6f7ff' : 'transparent',
-                        }}
-                      >
-                        <span>{formatWeekLabel(w)}</span>
-                        {deletable && (
-                          <CloseOutlined
-                            style={{ color: '#ff4d4f', padding: 4 }}
-                            onClick={(e) => handleDeleteWeekClick(w, e)}
-                          />
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
+              showSearch
+              filterOption={filterWeekOption}
+              options={weekSelectOptions}
+              optionRender={(option) => {
+                const w = option.value as string;
+                const deletable = canDeleteWeek(w);
+                return (
+                  <div className="week-option-row">
+                    <span>{option.label}</span>
+                    {deletable && (
+                      <CloseOutlined
+                        className="week-option-delete"
+                        onClick={(e) => handleDeleteWeekClick(w, e)}
+                      />
+                    )}
+                  </div>
+                );
+              }}
             />
           </Space>
           <Space>
             <TeamOutlined style={{ color: '#999' }} />
             <Text type="secondary">当前科室：</Text>
             <Select value={selectedDept} onChange={setSelectedDept} style={{ width: 150 }}
-              options={DEPTS.map(d => ({ label: d, value: d }))} />
+              options={deptList.map(d => ({ label: d, value: d }))} />
             <Button
               icon={<BulbOutlined />}
               onClick={() => setSuggestionOpen(true)}
@@ -2081,7 +2089,7 @@ const WeeklyReportV2: React.FC = () => {
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                 <Button icon={<LeftOutlined />} size="small" shape="circle" onClick={() => {
-                  const depts = DEPTS;
+                  const depts = deptList;
                   const idx = depts.indexOf(selectedDept);
                   setSelectedDept(depts[idx <= 0 ? depts.length - 1 : idx - 1]);
                 }} />
@@ -2095,7 +2103,7 @@ const WeeklyReportV2: React.FC = () => {
                   </Text>
                 </div>
                 <Button icon={<RightOutlined />} size="small" shape="circle" onClick={() => {
-                  const depts = DEPTS;
+                  const depts = deptList;
                   const idx = depts.indexOf(selectedDept);
                   setSelectedDept(depts[idx >= depts.length - 1 ? 0 : idx + 1]);
                 }} />
@@ -2204,7 +2212,7 @@ const WeeklyReportV2: React.FC = () => {
 
             {/* 科室 Tab 切换栏 */}
             <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginBottom: 16, padding: '6px 10px', background: 'rgba(0,0,0,0.02)', borderRadius: 10 }}>
-              {SORTED_DEPTS.map(dept => {
+              {deptList.map(dept => {
                 const active = dept === selectedDept;
                 return (
                   <div

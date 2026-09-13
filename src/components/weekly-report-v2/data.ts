@@ -2,7 +2,8 @@
  * 数据层 - 后端 JSON 文件存储
  * force-hmr: 1
  */
-import { WeeklyReport, User, SYSTEM_USERS, DEPTS, TaskItem, genAvatar } from './types';
+import { WeeklyReport, User, SYSTEM_USERS, TaskItem, genAvatar } from './types';
+import { getDeptsSnapshot } from '../../services/deptStore';
 
 import { getApiBaseUrl } from '../../config/app';
 import frozenReportsRaw from '../../data/frozen-weekly-reports.json';
@@ -335,8 +336,8 @@ export function applyDraftToReport(base: WeeklyReport, draft: WeeklyReport): Wee
 
 export function isSuperAdmin(user: User | undefined | null): boolean {
   if (!user) return false;
-  // 33528 作为系统管理员兜底保护
-  return user.id === '33528';
+  // 超级管理员按角色判断，不再绑定具体工号
+  return user.role === 'superadmin';
 }
 
 // 管理员：可编辑任意部门任意周期周报，但不能管理用户/权限（除 33528 外）
@@ -772,7 +773,7 @@ export function createNextWeekGlobally(
 
   const createdDepts: string[] = [];
 
-  for (const dept of DEPTS) {
+  for (const dept of getDeptsSnapshot()) {
     const existing = getReport(nextWeek, dept);
     if (existing) continue;
 
