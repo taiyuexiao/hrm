@@ -28,6 +28,7 @@
 | 管理后台 | 提交管理、行为日志（可回滚）、建议箱、回收站（软删除恢复） | `src/components/admin/`，路由 `/admin/*`；后端 `UserActionLogController`、`SuggestionController` | 📝 |
 | 用户与权限管理 | 账号 CRUD、角色-权限矩阵（superadmin/admin/leader/user + 细粒度权限码） | `src/components/user-management/`、`permission-manager/`；后端 `AuthController` `/api/auth`、`PermissionChecker` | [✅](modules/user-permission-admin.md) |
 | 科室管理 | 科室字典表 + 动态清单；超管创建科室、账号分配/改派科室 | 后端 `DeptController` `/api/depts`、`DeptDao`；前端 `src/services/deptStore.ts` | [✅](modules/department-management.md) |
+| 新人培养报告（日报） | 新人日报填报/浏览/批注，mentor 带教报告，领导看板；与周报并行的独立应用 | 后端 `DailyReportController` `/api/daily`、`DailyDao`；前端 `src/components/newbie-daily/` | [✅ 第一期](modules/new-employee-daily.md) |
 | 认证与安全 | 登录、JWT、首次登录强制改密、无操作自动退出 | `src/pages/`、后端 `SecurityConfig`/`JwtAuthenticationFilter` | 📝 |
 | 数据处理脚本 | 周报 Excel 解析/导入 SQLite、AI 预生成总结、员工数据合并打标、任务前缀修复 | `scripts/`（Python + 少量 ts/mjs 自测） | 📝 |
 | 部署交付 | 打包、启动/停止脚本、外部化配置、运维手册 | `deploy-config/`、`deploy-package/`、`build.sh` | 📝 |
@@ -53,6 +54,7 @@
 
 | 日期 | 类型 | 摘要 | 涉及模块 |
 |---|---|---|---|
+| 2026-09-13 | 新增 | 新人培养报告模块第一期：daily 角色 + daily_role/group_id/mentor 账号字段、`/api/daily/**`（4 张新表）、日报填报（解析填入/自动保存/提交）、浏览批注/回复/已读/通知、双系统登录选择页与侧边栏入口、账号管理支持 daily 账号与小组管理；e2e 13 新增，全量 24/24（[文档](modules/new-employee-daily.md)） | 新人培养报告、用户与权限管理 |
 | 2026-09-13 | 修复 | 授权去工号硬编码：isSuperAdmin 改角色判断、管理端点按 USER_MANAGE/PERMISSION_MANAGE 权限码；e2e 超管账号改环境变量（[BUG-002](modules/user-permission-admin.md#bug-002-superadmin-角色账号被拒于管理功能之外2026-09-13已解决)） | 用户与权限管理、科室管理 |
 | 2026-09-13 | 修复 | e2e 07/11 测试周期改动态未来周（与 06 一致），消除写死 `20260904` 过期的既有失败；全量回归 22/22 通过 | 数据处理脚本（e2e） |
 | 2026-09-13 | 新增 | 科室管理：departments 字典表 + `/api/depts` + 前端 deptStore 动态化（替换全部 DEPTS 引用点）+ 账号管理页新增科室/改派科室；e2e 12 新增（[文档](modules/department-management.md)） | 科室管理、周报管理 v2 |

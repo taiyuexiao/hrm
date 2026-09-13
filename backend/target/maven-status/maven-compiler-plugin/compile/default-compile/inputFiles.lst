@@ -3,6 +3,7 @@
 /Users/shipeilin/projects/shbank/HRM/backend/src/main/java/com/hr/backend/service/ReportService.java
 /Users/shipeilin/projects/shbank/HRM/backend/src/main/java/com/hr/backend/service/LlmService.java
 /Users/shipeilin/projects/shbank/HRM/backend/src/main/java/com/hr/backend/utils/JwtUtils.java
+/Users/shipeilin/projects/shbank/HRM/backend/src/main/java/com/hr/backend/controller/DailyReportController.java
 /Users/shipeilin/projects/shbank/HRM/backend/src/main/java/com/hr/backend/exception/OptimisticLockException.java
 /Users/shipeilin/projects/shbank/HRM/backend/src/main/java/com/hr/backend/dto/AiSummaryResponse.java
 /Users/shipeilin/projects/shbank/HRM/backend/src/main/java/com/hr/backend/config/SecurityConfig.java
@@ -31,4 +32,5 @@
 /Users/shipeilin/projects/shbank/HRM/backend/src/main/java/com/hr/backend/util/PermissionChecker.java
 /Users/shipeilin/projects/shbank/HRM/backend/src/main/java/com/hr/backend/entity/User.java
 /Users/shipeilin/projects/shbank/HRM/backend/src/main/java/com/hr/backend/dao/DeptDao.java
+/Users/shipeilin/projects/shbank/HRM/backend/src/main/java/com/hr/backend/dao/DailyDao.java
 /Users/shipeilin/projects/shbank/HRM/backend/src/main/java/com/hr/backend/filter/JwtAuthenticationFilter.java

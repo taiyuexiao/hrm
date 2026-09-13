@@ -15,10 +15,13 @@ import {
   BarChartOutlined,
   FileTextOutlined,
   DeleteOutlined,
+  RocketOutlined,
 } from '@ant-design/icons';
-import { BrowserRouter as Router, Routes, Route, Link, useLocation, useNavigate } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Link, useLocation, useNavigate, Navigate } from 'react-router-dom';
 import WeeklyReportV2 from './components/weekly-report-v2/WeeklyReportV2';
 import PresentationView from './components/weekly-report-v2/PresentationView';
+import DailyApp from './components/newbie-daily/DailyApp';
+import ChoosePage from './components/newbie-daily/ChoosePage';
 import Login from './pages/Login';
 import ChangePasswordPage from './pages/ChangePasswordPage';
 import UserManagement from './components/user-management/UserManagement';
@@ -37,6 +40,8 @@ import { validatePassword, PASSWORD_RULE_HINT } from './utils/password';
 interface NoticeItem {
   id: string;
   type: 'mention' | 'dept_comment';
+  /** 通知表原始类型：DAILY_ 前缀的为新人日报通知，点击路由到 /daily */
+  rawType?: string;
   title: string;
   desc: string;
   weekLabel: string;
@@ -136,6 +141,7 @@ function AppContent() {
           list.push({
             id: `n-${n.id}`,
             type: n.type === 'TASK_OVERWRITTEN' || n.type === 'TASK_DELETED' ? 'dept_comment' : 'mention',
+            rawType: n.type,
             title: n.title,
             desc: n.content,
             weekLabel: n.weekLabel,
@@ -161,6 +167,16 @@ function AppContent() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // 双系统账号（传统角色 + 日报身份）登录后先选择进入哪个系统；纯日报账号由根路由直接重定向到 /daily
+  useEffect(() => {
+    if (!authUser) return;
+    const dualApp = authUser.dailyRole && authUser.role !== 'daily';
+    if (dualApp && !sessionStorage.getItem('appChosen') && location.pathname !== '/choose') {
+      navigate('/choose', { replace: true });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const [settingOpen, setSettingOpen] = useState(false);
   const [darkMode, setDarkMode] = useState(false);
   const [autoRefresh, setAutoRefresh] = useState(true);
@@ -177,6 +193,7 @@ function AppContent() {
   const handleLogout = () => {
     localStorage.removeItem('auth-token');
     localStorage.removeItem('auth-user');
+    sessionStorage.removeItem('appChosen');
     window.location.reload();
   };
 
@@ -333,6 +350,7 @@ function AppContent() {
           theme="dark"
           mode="inline"
           selectedKeys={[
+            location.pathname === '/daily' ? 'daily' :
             location.pathname === '/knowledge-base' ? 'kb' :
             location.pathname === '/admin/action-logs' ? 'logs' :
             location.pathname === '/admin/reports' ? 'reports' :
@@ -340,10 +358,19 @@ function AppContent() {
             location.pathname === '/admin/recycle-bin' ? 'recycle-bin' : '7'
           ]}
           items={[
+            // 纯日报账号（新人/mentor）不显示周报入口，避免进入无权限的周报页
+            ...(authUser?.role !== 'daily' ? [
+              {
+                key: '7',
+                icon: <FormOutlined />,
+                label: <Link to="/weekly-report-v2">周报管理</Link>,
+              },
+            ] : []),
+            // 新人报告入口：所有非纯日报账号可见（老员工均可见日报），daily 账号也靠它回到日报页
             {
-              key: '7',
-              icon: <FormOutlined />,
-              label: <Link to="/weekly-report-v2">周报管理</Link>,
+              key: 'daily',
+              icon: <RocketOutlined />,
+              label: <Link to="/daily">新人报告</Link>,
             },
             ...(authUser?.permissions?.includes('KNOWLEDGE_BASE') ? [
               {
@@ -410,7 +437,12 @@ function AppContent() {
                             onClick={(e) => {
                               e.stopPropagation();
                               setMsgOpen(false);
-                              navigate(`/?weekLabel=${encodeURIComponent(item.weekLabel)}&dept=${encodeURIComponent(item.dept)}`);
+                              // 新人日报通知跳日报系统，其余维持原周报跳转
+                              if (item.rawType?.startsWith('DAILY')) {
+                                navigate('/daily');
+                              } else {
+                                navigate(`/?weekLabel=${encodeURIComponent(item.weekLabel)}&dept=${encodeURIComponent(item.dept)}`);
+                              }
                             }}
                           >
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -447,8 +479,11 @@ function AppContent() {
         </Header>
         <Content className="site-layout-background">
           <Routes>
-            <Route path="/" element={<WeeklyReportV2 />} />
+            {/* 纯日报账号（新人/mentor）登录后直达日报系统 */}
+            <Route path="/" element={authUser?.role === 'daily' ? <Navigate to="/daily" replace /> : <WeeklyReportV2 />} />
             <Route path="/weekly-report-v2" element={<WeeklyReportV2 />} />
+            <Route path="/daily" element={<DailyApp />} />
+            <Route path="/choose" element={<ChoosePage />} />
             <Route path="/presentation" element={<PresentationView />} />
             <Route path="/knowledge-base" element={<KnowledgeBase />} />
             <Route path="/admin/action-logs" element={<ActionLogPage />} />

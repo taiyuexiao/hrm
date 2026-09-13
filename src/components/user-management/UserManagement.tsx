@@ -5,6 +5,7 @@ import {
 import { PlusOutlined, LockOutlined, DeleteOutlined, EditOutlined, EyeOutlined, EyeInvisibleOutlined, TeamOutlined } from '@ant-design/icons';
 import { authApi } from '../../services/api';
 import { useDepts, useDeptItems, createDept } from '../../services/deptStore';
+import { dailyApi, DailyMeta } from '../../services/dailyApi';
 import { ROLE_LABELS, UserRole } from '../weekly-report-v2/types';
 
 interface UserMgmtProps {
@@ -28,6 +29,12 @@ const UserManagement: React.FC<UserMgmtProps> = ({ open, onClose }) => {
   const [deptMgmtOpen, setDeptMgmtOpen] = useState(false);
   const [newDeptName, setNewDeptName] = useState('');
   const [deptCreating, setDeptCreating] = useState(false);
+  // 新人日报：小组/带教元数据与小组管理
+  const [dailyMeta, setDailyMeta] = useState<DailyMeta | null>(null);
+  const [groupMgmtOpen, setGroupMgmtOpen] = useState(false);
+  const [newGroupName, setNewGroupName] = useState('');
+  const [newGroupLeader, setNewGroupLeader] = useState('');
+  const [groupCreating, setGroupCreating] = useState(false);
   const deptList = useDepts();
   const deptItems = useDeptItems();
   const [hovered, setHovered] = useState<string | null>(null);
@@ -49,6 +56,46 @@ const UserManagement: React.FC<UserMgmtProps> = ({ open, onClose }) => {
   const [editForm] = Form.useForm();
   const [roleForm] = Form.useForm();
   const [deptForm] = Form.useForm();
+  // 建号表单联动：角色为 daily 时改为收集日报字段
+  const createRole = Form.useWatch('role', form);
+  const createDailyRole = Form.useWatch('dailyRole', form);
+
+  const loadDailyMeta = useCallback(async () => {
+    try {
+      const res = await dailyApi.meta();
+      if (res.success) {
+        setDailyMeta({ groups: res.groups, newbies: res.newbies, mentors: res.mentors });
+      }
+    } catch { /* 元数据加载失败不阻塞账号管理 */ }
+  }, []);
+
+  useEffect(() => {
+    if (open) loadDailyMeta();
+  }, [open, loadDailyMeta]);
+
+  const handleCreateGroup = async () => {
+    const name = newGroupName.trim();
+    if (!name) {
+      message.warning('请输入小组名称');
+      return;
+    }
+    setGroupCreating(true);
+    try {
+      const res = await dailyApi.createGroup(name, newGroupLeader.trim() || undefined);
+      if (res.success) {
+        message.success(`小组「${name}」创建成功`);
+        setNewGroupName('');
+        setNewGroupLeader('');
+        loadDailyMeta();
+      } else {
+        message.error(res.message || '创建失败');
+      }
+    } catch (e: any) {
+      message.error(`创建失败: ${e.message}`);
+    } finally {
+      setGroupCreating(false);
+    }
+  };
 
   const loadUsers = useCallback(async () => {
     setLoading(true);
@@ -149,14 +196,17 @@ const UserManagement: React.FC<UserMgmtProps> = ({ open, onClose }) => {
 
   const handleEditRole = (record: any) => {
     setRoleTarget(record);
-    roleForm.setFieldsValue({ role: record.role });
+    roleForm.setFieldsValue({ role: record.role, dailyRole: record.dailyRole || '' });
     setRoleOpen(true);
   };
 
   const handleUpdateRole = async (values: any) => {
     if (!roleTarget) return;
     try {
-      const res = await authApi.updateUser(roleTarget.username, { role: values.role });
+      const res = await authApi.updateUser(roleTarget.username, {
+        role: values.role,
+        dailyRole: values.dailyRole ?? '',
+      });
       if (res.success) {
         message.success('角色已更新');
         setRoleOpen(false);
@@ -250,13 +300,17 @@ const UserManagement: React.FC<UserMgmtProps> = ({ open, onClose }) => {
       dataIndex: 'role',
       key: 'role',
       render: (role: string, record: any) => {
-        const color = role === 'superadmin' ? 'purple' : role === 'admin' ? 'red' : role === 'leader' ? 'gold' : 'blue';
+        const color = role === 'superadmin' ? 'purple' : role === 'admin' ? 'red' : role === 'leader' ? 'gold' : role === 'daily' ? 'green' : 'blue';
+        const DAILY_ROLE_LABELS: Record<string, string> = { newbie: '新人', mentor: '带教', leader: '日报领导' };
         return (
           <span
             style={{ cursor: 'pointer' }}
             onClick={() => handleEditRole(record)}
           >
-            <Tag color={color}>{ROLE_LABELS[role as UserRole] || role}</Tag>
+            <Tag color={color}>{role === 'daily' ? '日报账号' : (ROLE_LABELS[role as UserRole] || role)}</Tag>
+            {record.dailyRole && role !== 'daily' && (
+              <Tag color="cyan">{DAILY_ROLE_LABELS[record.dailyRole] || record.dailyRole}</Tag>
+            )}
             <EditOutlined style={{ marginLeft: 6, color: '#1890ff', fontSize: 12 }} />
           </span>
         );
@@ -350,9 +404,14 @@ const UserManagement: React.FC<UserMgmtProps> = ({ open, onClose }) => {
         footer={null}
       >
         <div style={{ marginBottom: 16, display: 'flex', justifyContent: 'space-between' }}>
-          <Button icon={<TeamOutlined />} onClick={() => setDeptMgmtOpen(true)}>
-            科室管理
-          </Button>
+          <Space>
+            <Button icon={<TeamOutlined />} onClick={() => setDeptMgmtOpen(true)}>
+              科室管理
+            </Button>
+            <Button icon={<TeamOutlined />} onClick={() => setGroupMgmtOpen(true)}>
+              小组管理（新人日报）
+            </Button>
+          </Space>
           <Button type="primary" icon={<PlusOutlined />} onClick={() => setCreateOpen(true)}>
             新增账号
           </Button>
@@ -392,16 +451,51 @@ const UserManagement: React.FC<UserMgmtProps> = ({ open, onClose }) => {
                 { label: '普通用户', value: 'user' },
                 { label: '总经理室', value: 'leader' },
                 { label: '管理员', value: 'admin' },
+                { label: '新人日报账号（仅日报系统）', value: 'daily' },
               ]}
             />
           </Form.Item>
-          <Form.Item name="dept" label="部门" initialValue={deptList[0]}>
-            <Select
-              showSearch
-              optionFilterProp="label"
-              options={deptList.map(d => ({ label: d, value: d }))}
-            />
-          </Form.Item>
+          {createRole !== 'daily' && (
+            <Form.Item name="dept" label="部门" initialValue={deptList[0]}>
+              <Select
+                showSearch
+                optionFilterProp="label"
+                options={deptList.map(d => ({ label: d, value: d }))}
+              />
+            </Form.Item>
+          )}
+          {createRole === 'daily' && (
+            <>
+              <Form.Item name="dailyRole" label="日报身份" initialValue="newbie" rules={[{ required: true, message: '请选择日报身份' }]}>
+                <Select
+                  options={[
+                    { label: '新人', value: 'newbie' },
+                    { label: '带教老师（mentor）', value: 'mentor' },
+                  ]}
+                />
+              </Form.Item>
+              {createDailyRole === 'newbie' && (
+                <>
+                  <Form.Item name="groupId" label="所属小组" rules={[{ required: true, message: '请选择小组' }]}>
+                    <Select
+                      placeholder="选择小组（可先在「小组管理」中创建）"
+                      options={(dailyMeta?.groups || []).map(g => ({
+                        label: g.name + (g.leader ? `（组长：${g.leader}）` : ''),
+                        value: g.id,
+                      }))}
+                    />
+                  </Form.Item>
+                  <Form.Item name="mentor" label="带教老师">
+                    <Select
+                      allowClear
+                      placeholder="选择带教老师"
+                      options={(dailyMeta?.mentors || []).map(m => ({ label: m.name, value: m.username }))}
+                    />
+                  </Form.Item>
+                </>
+              )}
+            </>
+          )}
         </Form>
       </Modal>
 
@@ -457,7 +551,7 @@ const UserManagement: React.FC<UserMgmtProps> = ({ open, onClose }) => {
         <Form form={roleForm} layout="vertical" onFinish={handleUpdateRole}>
           <Form.Item
             name="role"
-            label="角色"
+            label="角色（科室周报系统）"
             rules={[{ required: true, message: '请选择角色' }]}
           >
             <Select
@@ -465,6 +559,20 @@ const UserManagement: React.FC<UserMgmtProps> = ({ open, onClose }) => {
                 { label: '普通用户', value: 'user' },
                 { label: '总经理室', value: 'leader' },
                 { label: '管理员', value: 'admin' },
+              ]}
+            />
+          </Form.Item>
+          <Form.Item
+            name="dailyRole"
+            label="日报系统身份（新人日报）"
+            tooltip="设置后该账号可进入新人日报系统：新人填报，mentor/领导查阅批注；双系统账号登录后会出现系统选择页"
+          >
+            <Select
+              options={[
+                { label: '无（仅周报系统）', value: '' },
+                { label: '新人', value: 'newbie' },
+                { label: '带教老师（mentor）', value: 'mentor' },
+                { label: '领导', value: 'leader' },
               ]}
             />
           </Form.Item>
@@ -532,6 +640,52 @@ const UserManagement: React.FC<UserMgmtProps> = ({ open, onClose }) => {
         />
         <div style={{ marginTop: 8, fontSize: 12, color: '#999' }}>
           新科室会立即出现在周报科室栏与「新增账号」的部门下拉中；暂不支持删除/改名（避免历史周报数据成为孤儿）。
+        </div>
+      </Modal>
+
+      {/* 小组管理（新人日报） */}
+      <Modal
+        title="小组管理（新人日报）"
+        open={groupMgmtOpen}
+        onCancel={() => setGroupMgmtOpen(false)}
+        footer={null}
+        width={520}
+      >
+        <Space.Compact style={{ width: '100%', marginBottom: 8 }}>
+          <Input
+            placeholder="小组名称，如：第一组"
+            value={newGroupName}
+            onChange={e => setNewGroupName(e.target.value)}
+            maxLength={30}
+          />
+          <Input
+            placeholder="组长（选填）"
+            value={newGroupLeader}
+            onChange={e => setNewGroupLeader(e.target.value)}
+            maxLength={20}
+          />
+          <Button type="primary" icon={<PlusOutlined />} loading={groupCreating} onClick={handleCreateGroup}>
+            新增小组
+          </Button>
+        </Space.Compact>
+        <Table
+          dataSource={dailyMeta?.groups || []}
+          rowKey="id"
+          size="small"
+          pagination={false}
+          columns={[
+            { title: '小组名称', dataIndex: 'name', key: 'name' },
+            { title: '组长', dataIndex: 'leader', key: 'leader', render: (v?: string) => v || '-' },
+            {
+              title: '创建时间',
+              dataIndex: 'createdAt',
+              key: 'createdAt',
+              render: (v?: string) => (v ? v.slice(0, 10) : '-'),
+            },
+          ]}
+        />
+        <div style={{ marginTop: 8, fontSize: 12, color: '#999' }}>
+          小组用于新人日报的分组浏览与带教管理；创建新人账号（角色选「新人日报账号」）时在「新增账号」里分配小组与带教老师。
         </div>
       </Modal>
     </>

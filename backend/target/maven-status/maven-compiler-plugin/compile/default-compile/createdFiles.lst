@@ -3,6 +3,7 @@ com/hr/backend/controller/ReportController$3.class
 com/hr/backend/service/ReportService$3.class
 com/hr/backend/controller/SuggestionController.class
 com/hr/backend/service/ReportService.class
+com/hr/backend/controller/DailyReportController.class
 com/hr/backend/controller/AiController.class
 com/hr/backend/config/WebConfig.class
 com/hr/backend/service/SuggestionService$1.class
@@ -15,6 +16,7 @@ com/hr/backend/entity/User.class
 com/hr/backend/controller/NotificationController.class
 com/hr/backend/controller/UserActionLogController.class
 com/hr/backend/service/UserService.class
+com/hr/backend/dao/DailyDao$2.class
 com/hr/backend/controller/CommentController.class
 com/hr/backend/dao/UserDao.class
 com/hr/backend/service/CommentService.class
@@ -35,10 +37,12 @@ com/hr/backend/filter/JwtAuthenticationFilter.class
 com/hr/backend/exception/OptimisticLockException.class
 com/hr/backend/config/LlmProperties.class
 com/hr/backend/controller/AuthController.class
+com/hr/backend/dao/DailyDao$1.class
 com/hr/backend/util/PermissionChecker.class
 com/hr/backend/dao/UserDao$2.class
 com/hr/backend/HrApplication.class
 com/hr/backend/service/CommentService$1.class
+com/hr/backend/dao/DailyDao.class
 com/hr/backend/dto/AiGlobalAnalysisRequest.class
 com/hr/backend/dto/AiGlobalAnalysisRequest$DeptReport.class
 com/hr/backend/service/ReportService$2.class

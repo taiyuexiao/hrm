@@ -1,0 +1,509 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>新人日报系统 · UI 原型</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif; background: #eef1f5; color: #262626; font-size: 14px; }
+
+  /* ===== 原型切换栏 ===== */
+  .proto-bar { position: sticky; top: 0; z-index: 99; background: #001529; color: #fff; display: flex; align-items: center; gap: 6px; padding: 0 16px; height: 48px; flex-wrap: wrap; }
+  .proto-bar .pt { font-size: 12px; color: #8fa3bf; margin-right: 6px; white-space: nowrap; }
+  .proto-btn { background: transparent; border: 1px solid #2c425e; color: #c9d6e8; border-radius: 6px; padding: 4px 10px; cursor: pointer; font-size: 12.5px; white-space: nowrap; }
+  .proto-btn.active { background: #1677ff; border-color: #1677ff; color: #fff; }
+  .screen { display: none; min-height: calc(100vh - 48px); }
+  .screen.active { display: block; }
+
+  /* ===== 通用 ===== */
+  .topbar { background: #fff; height: 56px; display: flex; align-items: center; padding: 0 20px; gap: 14px; box-shadow: 0 1px 4px rgba(0,21,41,.08); position: relative; z-index: 5; }
+  .logo { font-weight: 700; font-size: 16px; white-space: nowrap; }
+  .logo .leaf { color: #52c41a; }
+  .topbar .spacer { flex: 1; }
+  .userchip { display: flex; align-items: center; gap: 8px; color: #595959; font-size: 13px; }
+  .avatar { width: 28px; height: 28px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; color: #fff; font-size: 12px; flex-shrink: 0; }
+  .bell { position: relative; cursor: pointer; font-size: 16px; color: #595959; }
+  .bell .dot { position: absolute; top: -4px; right: -6px; background: #ff4d4f; color: #fff; font-size: 10px; border-radius: 8px; padding: 0 4px; line-height: 14px; }
+  .card { background: #fff; border-radius: 10px; box-shadow: 0 1px 2px rgba(0,0,0,.04); }
+  .tag { display: inline-block; border-radius: 4px; font-size: 12px; padding: 1px 8px; line-height: 20px; }
+  .tag.green { background: #f6ffed; color: #389e0d; border: 1px solid #b7eb8f; }
+  .tag.blue { background: #e6f4ff; color: #0958d9; border: 1px solid #91caff; }
+  .tag.orange { background: #fff7e6; color: #d48806; border: 1px solid #ffd591; }
+  .tag.gray { background: #fafafa; color: #8c8c8c; border: 1px solid #d9d9d9; }
+  .tag.purple { background: #f9f0ff; color: #722ed1; border: 1px solid #d3adf7; }
+  .btn { border-radius: 6px; padding: 5px 16px; font-size: 13px; cursor: pointer; border: 1px solid #d9d9d9; background: #fff; }
+  .btn.primary { background: #1677ff; border-color: #1677ff; color: #fff; }
+  .btn.text { border: none; color: #1677ff; background: none; padding: 4px 8px; }
+  .seg { display: inline-flex; background: #f0f2f5; border-radius: 8px; padding: 3px; gap: 2px; }
+  .seg span { padding: 4px 18px; border-radius: 6px; font-size: 13px; color: #595959; cursor: pointer; }
+  .seg span.on { background: #fff; color: #1677ff; font-weight: 600; box-shadow: 0 1px 3px rgba(0,0,0,.08); }
+
+  /* ===== 登录选择页 ===== */
+  .chooser-wrap { min-height: calc(100vh - 48px); display: flex; flex-direction: column; align-items: center; justify-content: center; background: linear-gradient(135deg, #f0f5ff 0%, #f6ffed 100%); }
+  .chooser-wrap h2 { font-size: 22px; margin-bottom: 6px; }
+  .chooser-wrap .sub { color: #8c8c8c; margin-bottom: 32px; }
+  .chooser-cards { display: flex; gap: 28px; }
+  .chooser-card { width: 300px; background: #fff; border-radius: 14px; padding: 32px 26px; cursor: pointer; border: 2px solid transparent; box-shadow: 0 4px 16px rgba(0,0,0,.06); transition: all .2s; position: relative; }
+  .chooser-card:hover { transform: translateY(-4px); border-color: #1677ff; }
+  .chooser-card .ico { font-size: 38px; margin-bottom: 14px; }
+  .chooser-card h3 { font-size: 17px; margin-bottom: 8px; }
+  .chooser-card p { color: #8c8c8c; font-size: 13px; line-height: 1.7; }
+  .chooser-card .badge { position: absolute; top: 16px; right: 16px; }
+
+  /* ===== 侧边栏入口示意 ===== */
+  .legacy-wrap { display: flex; min-height: calc(100vh - 48px); }
+  .legacy-side { width: 208px; background: #001529; padding: 12px 8px; }
+  .legacy-side .ls-item { color: #a6adb4; padding: 10px 16px; border-radius: 6px; font-size: 13.5px; margin-bottom: 2px; display: flex; align-items: center; gap: 10px; }
+  .legacy-side .ls-item.hl { background: #1677ff; color: #fff; position: relative; }
+  .legacy-side .ls-item .new { margin-left: auto; background: #ff4d4f; color: #fff; font-size: 10px; border-radius: 8px; padding: 0 6px; line-height: 16px; }
+  .legacy-main { flex: 1; padding: 24px; position: relative; }
+  .callout { position: absolute; left: 220px; top: 210px; background: #fffbe6; border: 1px solid #ffe58f; border-radius: 8px; padding: 10px 14px; font-size: 13px; box-shadow: 0 4px 12px rgba(0,0,0,.1); max-width: 320px; }
+  .callout::before { content: ''; position: absolute; left: -18px; top: 14px; border: 9px solid transparent; border-right-color: #ffe58f; }
+
+  /* ===== 填报页 ===== */
+  .page { padding: 16px 20px; max-width: 1080px; margin: 0 auto; }
+  .meta-row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 14px; }
+  .meta-chip { background: #fff; border: 1px solid #e8e8e8; border-radius: 8px; padding: 8px 14px; font-size: 13px; color: #595959; display: flex; gap: 6px; align-items: center; }
+  .meta-chip b { color: #262626; font-weight: 600; }
+  .sec-card { background: #fff; border-radius: 10px; margin-bottom: 14px; box-shadow: 0 1px 2px rgba(0,0,0,.04); overflow: hidden; }
+  .sec-head { display: flex; align-items: center; gap: 8px; padding: 12px 16px; border-bottom: 1px solid #f5f5f5; }
+  .sec-head .n { width: 22px; height: 22px; border-radius: 6px; background: #e6f4ff; color: #1677ff; display: inline-flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700; }
+  .sec-head .t { font-weight: 600; }
+  .sec-head .hint { color: #bfbfbf; font-size: 12px; margin-left: auto; }
+  .sec-body { padding: 12px 16px; }
+  .faketext { width: 100%; min-height: 84px; border: 1px solid #e8e8e8; border-radius: 8px; padding: 10px 12px; font-size: 13.5px; line-height: 1.8; color: #404040; background: #fdfdfd; }
+  .faketext:focus { outline: none; border-color: #1677ff; }
+  .fill-bar { position: sticky; bottom: 0; background: rgba(255,255,255,.92); backdrop-filter: blur(6px); border-top: 1px solid #f0f0f0; padding: 10px 20px; display: flex; align-items: center; gap: 12px; border-radius: 0 0 10px 10px; }
+  .autosave { color: #8c8c8c; font-size: 12.5px; }
+  .hl-mark { background: #fff1b8; padding: 0 2px; border-radius: 2px; border-bottom: 2px solid #faad14; }
+
+  /* ===== 浏览页 ===== */
+  .browse { display: grid; grid-template-columns: 230px 1fr 330px; gap: 14px; padding: 16px 20px; max-width: 1440px; margin: 0 auto; align-items: start; }
+  .tree-card { padding: 10px; }
+  .tree-search { border: 1px solid #e8e8e8; border-radius: 6px; padding: 6px 10px; font-size: 13px; width: 100%; margin-bottom: 8px; color: #8c8c8c; }
+  .tree-group { font-size: 12px; color: #8c8c8c; padding: 8px 8px 4px; display: flex; align-items: center; gap: 4px; }
+  .tree-item { display: flex; align-items: center; gap: 8px; padding: 7px 10px; border-radius: 6px; cursor: pointer; font-size: 13.5px; }
+  .tree-item:hover { background: #f5f5f5; }
+  .tree-item.on { background: #e6f4ff; color: #0958d9; font-weight: 600; }
+  .tree-item .mini { margin-left: auto; font-size: 11px; color: #bfbfbf; }
+  .report-head { padding: 16px 20px 12px; border-bottom: 1px solid #f5f5f5; }
+  .report-body { padding: 16px 20px; }
+  .r-sec { margin-bottom: 18px; }
+  .r-sec .rt { font-weight: 600; margin-bottom: 6px; display: flex; align-items: center; gap: 8px; }
+  .r-sec .rt::before { content: ''; width: 4px; height: 14px; background: #1677ff; border-radius: 2px; }
+  .r-sec .rc { color: #404040; line-height: 1.9; font-size: 13.5px; white-space: pre-wrap; }
+  .cmt-card { padding: 14px; }
+  .cmt { display: flex; gap: 10px; padding: 10px 0; border-bottom: 1px dashed #f0f0f0; }
+  .cmt .cb { flex: 1; }
+  .cmt .cn { font-size: 13px; font-weight: 600; display: flex; align-items: center; gap: 6px; }
+  .cmt .ct { color: #bfbfbf; font-size: 11.5px; font-weight: 400; margin-left: auto; }
+  .cmt .cc { font-size: 13px; color: #404040; line-height: 1.7; margin-top: 3px; }
+  .cmt .quote { background: #fffbe6; border-left: 3px solid #faad14; padding: 4px 8px; font-size: 12px; color: #8c8c8c; border-radius: 0 6px 6px 0; margin-top: 4px; }
+  .cmt .reply { background: #f7f9fc; border-radius: 8px; padding: 8px 10px; margin-top: 8px; }
+  .cmt .ops { margin-top: 4px; font-size: 12px; }
+  .read-row { display: flex; align-items: center; gap: 6px; padding: 8px 2px; font-size: 12px; color: #8c8c8c; }
+  .cmt-input { display: flex; gap: 8px; margin-top: 10px; }
+  .cmt-input .box { flex: 1; border: 1px solid #e8e8e8; border-radius: 8px; padding: 8px 10px; color: #bfbfbf; font-size: 13px; background: #fdfdfd; }
+
+  /* ===== 看板 ===== */
+  .stat-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 14px; }
+  .stat { padding: 16px 18px; display: flex; align-items: center; gap: 14px; }
+  .stat .si { width: 42px; height: 42px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 20px; }
+  .stat .sv { font-size: 24px; font-weight: 700; line-height: 1.2; }
+  .stat .sl { color: #8c8c8c; font-size: 12.5px; }
+  .matrix-card { padding: 16px 18px; overflow-x: auto; }
+  table.mx { border-collapse: collapse; min-width: 100%; }
+  table.mx th, table.mx td { padding: 6px 4px; text-align: center; font-size: 12.5px; }
+  table.mx th.day { color: #8c8c8c; font-weight: 400; min-width: 34px; }
+  table.mx th.day .wd { font-size: 10px; color: #bfbfbf; display: block; }
+  table.mx td.who { text-align: left; padding-right: 14px; white-space: nowrap; }
+  table.mx tr.grp td { background: #fafafa; color: #8c8c8c; font-size: 12px; text-align: left; padding: 6px 10px; border-top: 1px solid #f0f0f0; }
+  .mdot { width: 16px; height: 16px; border-radius: 50%; display: inline-block; cursor: pointer; border: 2px solid transparent; }
+  .mdot.g { background: #52c41a; } .mdot.y { background: #faad14; } .mdot.n { background: #e5e6eb; border-color: #dcdee5; }
+  .mdot.today { box-shadow: 0 0 0 2px #1677ff55; }
+  .legend { display: flex; gap: 16px; font-size: 12.5px; color: #595959; align-items: center; }
+
+  /* ===== 解析弹窗 ===== */
+  .modal-mask { position: fixed; inset: 0; background: rgba(0,0,0,.45); display: none; align-items: center; justify-content: center; z-index: 100; }
+  .modal-mask.show { display: flex; }
+  .modal { width: 860px; max-height: 84vh; background: #fff; border-radius: 12px; overflow: hidden; display: flex; flex-direction: column; }
+  .modal-h { padding: 14px 20px; border-bottom: 1px solid #f0f0f0; font-weight: 600; display: flex; align-items: center; }
+  .modal-b { padding: 16px 20px; display: grid; grid-template-columns: 1fr 34px 1fr; gap: 12px; overflow: auto; }
+  .paste-box { border: 1px dashed #d9d9d9; border-radius: 8px; min-height: 300px; padding: 12px; font-size: 13px; line-height: 1.9; color: #595959; background: #fafafa; white-space: pre-wrap; }
+  .parse-arrow { align-self: center; text-align: center; color: #1677ff; font-size: 20px; }
+  .parse-out .po { border: 1px solid #e8e8e8; border-radius: 8px; margin-bottom: 8px; overflow: hidden; }
+  .parse-out .po-t { background: #f6ffed; color: #389e0d; font-size: 12px; padding: 4px 10px; font-weight: 600; }
+  .parse-out .po-c { padding: 8px 10px; font-size: 12.5px; color: #595959; line-height: 1.7; }
+  .modal-f { padding: 12px 20px; border-top: 1px solid #f0f0f0; display: flex; justify-content: flex-end; gap: 10px; }
+
+  .annot { background: #fff; border: 1px solid #ffe58f; border-radius: 8px; padding: 8px 12px; font-size: 12.5px; color: #8c6d1f; margin-bottom: 14px; display: flex; gap: 8px; align-items: center; }
+</style>
+</head>
+<body>
+
+<div class="proto-bar">
+  <span class="pt">UI 原型 · 点击切换界面：</span>
+  <button class="proto-btn active" data-s="s0">① 登录选择页</button>
+  <button class="proto-btn" data-s="s1">② 周报侧边栏入口</button>
+  <button class="proto-btn" data-s="s2">③ 新人·填报</button>
+  <button class="proto-btn" data-s="s3">④ 浏览与批注</button>
+  <button class="proto-btn" data-s="s4">⑤ Mentor·带教填报</button>
+  <button class="proto-btn" data-s="s5">⑥ 点阵看板</button>
+</div>
+
+<!-- ================= ① 登录选择页 ================= -->
+<div class="screen active" id="s0">
+  <div class="chooser-wrap">
+    <h2>您好，于浩瀚 👋</h2>
+    <div class="sub">您的账号可访问以下两个系统，请选择进入（右上角可随时切换）</div>
+    <div class="chooser-cards">
+      <div class="chooser-card">
+        <div class="ico">📊</div>
+        <h3>科室周报管理</h3>
+        <p>各科室周报填报、提交流转、评论协作与知识库</p>
+      </div>
+      <div class="chooser-card">
+        <span class="badge tag orange">🔔 3 条新批注</span>
+        <div class="ico">🌱</div>
+        <h3>新人日报管理</h3>
+        <p>新人培养日报 / 周报 / 月报，带教评估与提交看板</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ================= ② 周报侧边栏入口 ================= -->
+<div class="screen" id="s1">
+  <div class="legacy-wrap">
+    <div class="legacy-side">
+      <div class="ls-item">📝 周报填报</div>
+      <div class="ls-item">📚 知识库</div>
+      <div class="ls-item">📊 提交管理</div>
+      <div class="ls-item hl">🌱 新人报告 <span class="new">新</span></div>
+      <div class="ls-item">⚙️ 管理后台</div>
+    </div>
+    <div class="legacy-main">
+      <div class="card" style="padding:20px; max-width:640px; color:#8c8c8c; font-size:13px; line-height:2;">
+        此处为现有「科室周报管理」界面（示意）。<br>
+        左侧深色边栏新增 <b style="color:#1677ff">🌱 新人报告</b> 栏目 ——
+        所有拥有日报身份的账号（领导 / mentor）可见，点击后携带登录态直接进入新人日报界面，无需二次登录。
+      </div>
+      <div class="callout">💡 入口按 <b>daily_role 字段</b>自动出现：于浩瀚、卢易、徐启鹏、胡申民等被设为日报侧 leader 的账号登录周报系统时即可看到，代码中不写任何人名。</div>
+    </div>
+  </div>
+</div>
+
+<!-- ================= ③ 新人·填报 ================= -->
+<div class="screen" id="s2">
+  <div class="topbar">
+    <div class="logo"><span class="leaf">🌱</span> 新人培养报告</div>
+    <div class="seg"><span class="on">填报</span><span>浏览</span></div>
+    <div class="spacer"></div>
+    <div class="bell">🔔<span class="dot">2</span></div>
+    <div class="userchip"><span class="avatar" style="background:#1677ff">陈</span> 陈小北 · 第一组</div>
+  </div>
+  <div class="page">
+    <div class="meta-row">
+      <div class="seg"><span class="on">日报</span><span>周报</span><span>月报</span></div>
+      <div class="meta-chip">📅 <b>2026-09-14（周一）</b></div>
+      <div class="meta-chip">带教老师：<b>黄奕豪</b></div>
+      <div class="meta-chip">组长：<b>周梦林</b></div>
+      <span class="tag green">✓ 今日已提交</span>
+      <button class="btn primary" style="margin-left:auto" onclick="document.getElementById('parseModal').classList.add('show')">✨ 智能解析填入</button>
+    </div>
+
+    <div class="annot">⚠️ 您还有 <b>1 个工作日</b>（09-11 周五）未提交日报，<a style="color:#1677ff">点击补交</a></div>
+
+    <div class="sec-card">
+      <div class="sec-head"><span class="n">1</span><span class="t">今日学习 / 工作内容</span><span class="hint">支持 Markdown；自动保存</span></div>
+      <div class="sec-body"><div class="faketext" contenteditable="true">1. 学习《数据库索引原理》第 3 章，完成 B+ 树结构笔记；
+2. 跟随黄老师熟悉核心账务系统表结构，整理了 12 张主表的字段说明；
+3. 完成 SQL 练习 8 题，其中多表关联 3 题<span class="hl-mark">执行效率不达标，已用 EXPLAIN 定位到缺失索引</span>。</div></div>
+    </div>
+    <div class="sec-card">
+      <div class="sec-head"><span class="n">2</span><span class="t">明日学习 / 工作计划</span><span class="hint">提交后自动转入「手头任务」</span></div>
+      <div class="sec-body"><div class="faketext" contenteditable="true">1. 继续学习《数据库索引原理》第 4 章（联合索引与最左前缀）；
+2. 优化今日 3 题低效 SQL，对比加索引前后的执行计划；
+3. 参加组内周会，汇报本周学习进展。</div></div>
+    </div>
+    <div class="sec-card">
+      <div class="sec-head"><span class="n">3</span><span class="t">遇到问题</span><span class="hint">带教 / 组长 / 领导会重点关注此栏</span></div>
+      <div class="sec-body"><div class="faketext" contenteditable="true">内网测试环境的 VPN 今天上午频繁掉线，重装客户端后恢复；对联合索引的「最左前缀」原则理解还不够透彻，已约黄老师周三答疑。</div></div>
+    </div>
+    <div class="sec-card">
+      <div class="sec-head"><span class="n">4</span><span class="t">手头学习及工作任务</span><span class="hint">未完成事项的持续清单</span></div>
+      <div class="sec-body"><div class="faketext" contenteditable="true">▢ 阅读《核心系统业务手册》第 2 章（截止 09-18）
+▢ 完成 SQL 练习题库剩余 22 题（截止 09-25）
+▢ 准备组内周会汇报材料（截止 09-15）</div></div>
+    </div>
+    <div class="fill-bar">
+      <span class="autosave">✓ 已于 14:32:08 自动保存草稿</span>
+      <span style="flex:1"></span>
+      <button class="btn">存草稿</button>
+      <button class="btn primary">提交日报</button>
+    </div>
+  </div>
+</div>
+
+<!-- ================= ④ 浏览与批注 ================= -->
+<div class="screen" id="s3">
+  <div class="topbar">
+    <div class="logo"><span class="leaf">🌱</span> 新人培养报告</div>
+    <div class="seg"><span>填报</span><span class="on">浏览</span></div>
+    <div class="spacer"></div>
+    <div class="bell">🔔<span class="dot">3</span></div>
+    <div class="userchip"><span class="avatar" style="background:#fa8c16">黄</span> 黄奕豪 · 带教老师</div>
+  </div>
+  <div class="browse">
+    <!-- 左：小组树 -->
+    <div class="card tree-card">
+      <input class="tree-search" value="🔍 搜索新人 / 日期">
+      <div class="seg" style="width:100%; margin-bottom:6px;"><span class="on" style="flex:1;text-align:center">全部</span><span style="flex:1;text-align:center">⭐ 我带的</span></div>
+      <div class="tree-group">▾ 第一组 · 带教：黄奕豪</div>
+      <div class="tree-item on"><span class="avatar" style="background:#1677ff;width:22px;height:22px;font-size:11px">陈</span>陈小北 <span class="mini">9/14</span></div>
+      <div class="tree-item"><span class="avatar" style="background:#13c2c2;width:22px;height:22px;font-size:11px">林</span>林小满 <span class="mini">9/14</span></div>
+      <div class="tree-item"><span class="avatar" style="background:#722ed1;width:22px;height:22px;font-size:11px">赵</span>赵砚 <span class="mini">9/14</span></div>
+      <div class="tree-item"><span class="avatar" style="background:#eb2f96;width:22px;height:22px;font-size:11px">孙</span>孙可 <span class="mini" style="color:#ff4d4f">缺 9/11</span></div>
+      <div class="tree-item"><span class="avatar" style="background:#fa8c16;width:22px;height:22px;font-size:11px">何</span>何舟 <span class="mini">9/14</span></div>
+      <div class="tree-group">▾ 第二组 · 带教：张镓奇</div>
+      <div class="tree-item"><span class="avatar" style="background:#2f54eb;width:22px;height:22px;font-size:11px">顾</span>顾盼 <span class="mini">9/14</span></div>
+      <div class="tree-item"><span class="avatar" style="background:#a0d911;width:22px;height:22px;font-size:11px">罗</span>罗一帆 <span class="mini">9/14</span></div>
+    </div>
+
+    <!-- 中：报告正文 -->
+    <div class="card">
+      <div class="report-head">
+        <div style="display:flex;align-items:center;gap:10px;">
+          <span class="avatar" style="background:#1677ff;width:36px;height:36px;font-size:15px">陈</span>
+          <div>
+            <div style="font-weight:700;font-size:15px;">陈小北 · 日报 <span class="tag blue" style="margin-left:4px">2026-09-14 周一</span></div>
+            <div style="color:#8c8c8c;font-size:12px;margin-top:2px;">第一组 · 带教：黄奕豪 · 组长：周梦林 · 提交于 14:32</div>
+          </div>
+          <div style="margin-left:auto;display:flex;gap:8px;align-items:center;">
+            <button class="btn">‹ 前一天</button><button class="btn">后一天 ›</button>
+            <button class="btn text">✨ AI 总结</button>
+          </div>
+        </div>
+      </div>
+      <div class="report-body">
+        <div class="r-sec"><div class="rt">今日学习 / 工作内容</div><div class="rc">1. 学习《数据库索引原理》第 3 章，完成 B+ 树结构笔记；
+2. 跟随黄老师熟悉核心账务系统表结构，整理了 12 张主表的字段说明；
+3. 完成 SQL 练习 8 题，其中多表关联 3 题<span class="hl-mark">执行效率不达标，已用 EXPLAIN 定位到缺失索引</span> <span class="tag orange" style="font-size:11px">💬1 条批注</span></div></div>
+        <div class="r-sec"><div class="rt">明日学习 / 工作计划</div><div class="rc">1. 继续学习《数据库索引原理》第 4 章（联合索引与最左前缀）；
+2. 优化今日 3 题低效 SQL，对比加索引前后的执行计划；
+3. 参加组内周会，汇报本周学习进展。</div></div>
+        <div class="r-sec"><div class="rt">遇到问题</div><div class="rc">内网测试环境的 VPN 今天上午频繁掉线，重装客户端后恢复；对联合索引的「最左前缀」原则理解还不够透彻，已约黄老师周三答疑。</div></div>
+        <div class="r-sec"><div class="rt">手头学习及工作任务</div><div class="rc">▢ 阅读《核心系统业务手册》第 2 章（截止 09-18）
+▢ 完成 SQL 练习题库剩余 22 题（截止 09-25）
+▢ 准备组内周会汇报材料（截止 09-15）</div></div>
+        <div class="r-sec" style="background:#f6ffed;border-radius:8px;padding:10px 14px;">
+          <div class="rt" style="color:#389e0d">✨ AI 完成度评估</div>
+          <div class="rc" style="color:#595959;font-size:12.5px">今日计划完成 4/5 项（80%）。「阅读业务手册」连续 2 天未见进展，建议关注；SQL 练习进度正常，预计 09-23 提前完成。</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 右：评论区 -->
+    <div class="card cmt-card">
+      <div style="font-weight:600;margin-bottom:4px;">💬 批注与评论 <span style="color:#bfbfbf;font-weight:400;font-size:12px">（3）</span></div>
+      <div class="read-row">👁 已读：<b style="color:#595959">黄奕豪、周梦林、于浩瀚</b> 等 5 人</div>
+      <div class="cmt">
+        <span class="avatar" style="background:#fa8c16">黄</span>
+        <div class="cb">
+          <div class="cn">黄奕豪 <span class="tag orange" style="font-size:10px">带教老师</span> <span class="ct">14:05</span></div>
+          <div class="quote">引用：「执行效率不达标，已用 EXPLAIN 定位到缺失索引」</div>
+          <div class="cc">定位思路正确 👍 明天把优化前后的执行计划截图贴进日报，组内周会讲一遍。</div>
+          <div class="ops"><button class="btn text">回复</button></div>
+          <div class="reply">
+            <div class="cn" style="font-size:12px">陈小北 <span class="ct">14:28</span></div>
+            <div class="cc">好的，已截图存档，明天补充 🙌</div>
+          </div>
+        </div>
+      </div>
+      <div class="cmt">
+        <span class="avatar" style="background:#f5222d">于</span>
+        <div class="cb">
+          <div class="cn">于浩瀚 <span class="tag purple" style="font-size:10px">领导</span> <span class="ct">10:20</span></div>
+          <div class="cc">VPN 掉线问题已协调运维排查，若再出现直接在「遇到问题」里 @我。</div>
+          <div class="ops"><button class="btn text">回复</button></div>
+        </div>
+      </div>
+      <div class="cmt" style="border-bottom:none">
+        <span class="avatar" style="background:#13c2c2">林</span>
+        <div class="cb">
+          <div class="cn">林小满 <span class="tag gray" style="font-size:10px">同组</span> <span class="ct">09:48</span></div>
+          <div class="cc">最左前缀我昨天也卡了，B 站这个视频讲得很清楚：[链接] 可以看看~</div>
+          <div class="ops"><button class="btn text">回复</button></div>
+        </div>
+      </div>
+      <div class="cmt-input"><div class="box">写下批注，@ 可提醒对方…</div><button class="btn primary">发送</button></div>
+    </div>
+  </div>
+</div>
+
+<!-- ================= ⑤ Mentor·带教填报 ================= -->
+<div class="screen" id="s4">
+  <div class="topbar">
+    <div class="logo"><span class="leaf">🌱</span> 新人培养报告</div>
+    <div class="seg"><span class="on">带教填报</span><span>浏览</span><span>看板</span></div>
+    <div class="spacer"></div>
+    <div class="userchip"><span class="avatar" style="background:#fa8c16">黄</span> 黄奕豪 · 带教老师</div>
+  </div>
+  <div class="page">
+    <div class="meta-row">
+      <div class="seg"><span class="on">小组报告</span><span>个人报告（按学员）</span></div>
+      <div class="seg"><span class="on">周报</span><span>月报</span></div>
+      <div class="meta-chip">📅 周期：<b>2026-09-18 周</b></div>
+      <div class="meta-chip">小组：<b>第一组</b>（5 人）</div>
+      <span class="tag orange">✎ 草稿</span>
+      <button class="btn primary" style="margin-left:auto">✨ 智能解析填入</button>
+    </div>
+    <div class="sec-card">
+      <div class="sec-head"><span class="n">1</span><span class="t">本周小组任务</span></div>
+      <div class="sec-body"><div class="faketext" contenteditable="true">1. 完成《数据库索引原理》第 3–4 章学习并组内串讲；
+2. SQL 练习题库人均完成 30 题；
+3. 核心业务系统表结构摸底（账务模块）。</div></div>
+    </div>
+    <div class="sec-card">
+      <div class="sec-head"><span class="n">2</span><span class="t">本周培养内容 / 阅读指标达成评估</span></div>
+      <div class="sec-body"><div class="faketext" contenteditable="true">阅读指标：人均第 3 章完成，达成率 100%；赵砚、孙可进度超前已进入第 4 章。
+串讲质量：陈小北主讲 B+ 树，结构清晰；孙可的习题讲解互动不足，已单独沟通。</div></div>
+    </div>
+    <div class="sec-card">
+      <div class="sec-head"><span class="n">3</span><span class="t">本周新人整体情况</span><span class="hint">月报时此栏为「本月资产沉淀情况」</span></div>
+      <div class="sec-body"><div class="faketext" contenteditable="true">整体状态良好，出勤全勤。孙可本周缺交 1 次日报（已补），学习主动性待加强；其余 4 人日报质量稳定，陈小北的笔记可作为组内范本。</div></div>
+    </div>
+    <div class="sec-card">
+      <div class="sec-head"><span class="n">4</span><span class="t">下周小组任务</span></div>
+      <div class="sec-body"><div class="faketext" contenteditable="true">1. 完成第 4 章学习与联合索引专项练习；
+2. 启动「模拟需求」小课题：账户余额查询接口设计；
+3. 组内周会轮值主讲：林小满。</div></div>
+    </div>
+    <div class="sec-card">
+      <div class="sec-head"><span class="n">5</span><span class="t">本周培养遇到的问题和调整方向</span></div>
+      <div class="sec-body"><div class="faketext" contenteditable="true">问题：两人反映 SQL 题库难度跨度大，中间存在断层。
+调整：补充 10 道过渡难度题目；周三增加一次集中答疑（1 小时）。</div></div>
+    </div>
+    <div class="fill-bar">
+      <span class="autosave">✓ 已于 16:02:41 自动保存草稿 · 个人报告：已填 3/5 人</span>
+      <span style="flex:1"></span>
+      <button class="btn">存草稿</button>
+      <button class="btn primary">提交周报</button>
+    </div>
+  </div>
+</div>
+
+<!-- ================= ⑥ 点阵看板 ================= -->
+<div class="screen" id="s5">
+  <div class="topbar">
+    <div class="logo"><span class="leaf">🌱</span> 新人培养报告</div>
+    <div class="seg"><span>带教填报</span><span>浏览</span><span class="on">看板</span></div>
+    <div class="spacer"></div>
+    <div class="userchip"><span class="avatar" style="background:#f5222d">于</span> 于浩瀚 · 领导</div>
+  </div>
+  <div class="page" style="max-width:1280px">
+    <div class="stat-row">
+      <div class="card stat"><div class="si" style="background:#e6f4ff">📮</div><div><div class="sv">10</div><div class="sl">今日应提交</div></div></div>
+      <div class="card stat"><div class="si" style="background:#f6ffed">✅</div><div><div class="sv" style="color:#389e0d">8</div><div class="sl">今日已提交</div></div></div>
+      <div class="card stat"><div class="si" style="background:#fff1f0">⚠️</div><div><div class="sv" style="color:#cf1322">2</div><div class="sl">今日未提交</div></div></div>
+      <div class="card stat"><div class="si" style="background:#fff7e6">📈</div><div><div class="sv" style="color:#d48806">93.3%</div><div class="sl">本月提交率</div></div></div>
+    </div>
+    <div class="card matrix-card">
+      <div style="display:flex;align-items:center;gap:14px;margin-bottom:12px;flex-wrap:wrap;">
+        <b style="font-size:15px">新人日报提交点阵</b>
+        <div class="meta-chip">📅 <b>2026 年 9 月</b></div>
+        <div class="seg"><span class="on">全部小组</span><span>第一组</span><span>第二组</span></div>
+        <div style="margin-left:auto" class="legend">
+          <span><span class="mdot g"></span> 已交</span>
+          <span><span class="mdot y"></span> 补交</span>
+          <span><span class="mdot n"></span> 缺交</span>
+          <span style="color:#bfbfbf">点击圆点可查看当天日报</span>
+        </div>
+      </div>
+      <table class="mx" id="mxTable"></table>
+    </div>
+    <div class="card matrix-card" style="margin-top:14px">
+      <div style="display:flex;align-items:center;gap:14px;margin-bottom:12px;">
+        <b style="font-size:15px">带教报告提交情况</b>
+        <span style="color:#bfbfbf;font-size:12.5px">小组周报 / 月报 + 个人评估</span>
+      </div>
+      <table class="mx">
+        <tr><th style="text-align:left;padding-right:14px">带教老师</th><th class="day">09-04 周</th><th class="day">09-11 周</th><th class="day">09-18 周</th><th class="day">8 月报</th><th class="day">9 月报</th></tr>
+        <tr><td class="who">🧑‍🏫 黄奕豪（第一组）</td><td><span class="mdot g"></span></td><td><span class="mdot g"></span></td><td><span class="mdot y"></span></td><td><span class="mdot g"></span></td><td><span class="mdot n"></span></td></tr>
+        <tr><td class="who">🧑‍🏫 张镓奇（第二组）</td><td><span class="mdot g"></span></td><td><span class="mdot g"></span></td><td><span class="mdot g"></span></td><td><span class="mdot y"></span></td><td><span class="mdot n"></span></td></tr>
+        <tr><td class="who">🧑‍🏫 周梦林（第三组）</td><td><span class="mdot g"></span></td><td><span class="mdot y"></span></td><td><span class="mdot n"></span></td><td><span class="mdot g"></span></td><td><span class="mdot n"></span></td></tr>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- ================= 解析弹窗 ================= -->
+<div class="modal-mask" id="parseModal" onclick="if(event.target===this)this.classList.remove('show')">
+  <div class="modal">
+    <div class="modal-h">✨ 智能解析填入 <span style="color:#bfbfbf;font-weight:400;font-size:12px;margin-left:8px">粘贴整段文字，自动按栏目拆分，确认后填入</span>
+      <button class="btn text" style="margin-left:auto" onclick="document.getElementById('parseModal').classList.remove('show')">✕ 关闭</button></div>
+    <div class="modal-b">
+      <div class="paste-box">今日学习：学习《数据库索引原理》第3章，完成B+树笔记；跟随黄老师熟悉核心账务系统表结构，整理12张主表字段说明；完成SQL练习8题。
+明日计划：继续学习第4章联合索引；优化3题低效SQL并对比执行计划；参加组内周会汇报。
+遇到问题：VPN频繁掉线，重装客户端后恢复；最左前缀原则理解不透，已约周三答疑。
+手头任务：阅读业务手册第2章（9-18截止）；SQL题库剩余22题（9-25截止）；准备周会汇报（9-15截止）。</div>
+      <div class="parse-arrow">➜</div>
+      <div class="parse-out">
+        <div class="po"><div class="po-t">① 今日学习 / 工作内容 · 识别 3 条</div><div class="po-c">学习《数据库索引原理》第3章…；熟悉核心账务系统表结构…；完成SQL练习8题</div></div>
+        <div class="po"><div class="po-t">② 明日学习 / 工作计划 · 识别 3 条</div><div class="po-c">继续学习第4章…；优化3题低效SQL…；参加组内周会</div></div>
+        <div class="po"><div class="po-t">③ 遇到问题 · 识别 2 条</div><div class="po-c">VPN 掉线…；最左前缀理解不透…</div></div>
+        <div class="po"><div class="po-t">④ 手头学习及工作任务 · 识别 3 条</div><div class="po-c">阅读业务手册…；SQL题库剩余22题…；准备周会汇报…</div></div>
+      </div>
+    </div>
+    <div class="modal-f"><button class="btn">重新解析</button><button class="btn">追加填入</button><button class="btn primary">覆盖填入</button></div>
+  </div>
+</div>
+
+<script>
+  // 界面切换
+  document.querySelectorAll('.proto-btn').forEach(b => b.onclick = () => {
+    document.querySelectorAll('.proto-btn').forEach(x => x.classList.remove('active'));
+    document.querySelectorAll('.screen').forEach(x => x.classList.remove('active'));
+    b.classList.add('active');
+    document.getElementById(b.dataset.s).classList.add('active');
+    window.scrollTo(0, 0);
+  });
+
+  // 点阵图：2026-09-01 ~ 09-18 的工作日
+  const days = [[1,'二'],[2,'三'],[3,'四'],[4,'五'],[7,'一'],[8,'二'],[9,'三'],[10,'四'],[11,'五'],[14,'一'],[15,'二'],[16,'三'],[17,'四'],[18,'五']];
+  const todayIdx = 9; // 09-14 为"今天"（演示视角）
+  const groups = [
+    { name: '第一组 · 带教：黄奕豪', members: [
+      ['陈小北', 'gggggggggg----'],
+      ['林小满', 'gggygggggg----'],
+      ['赵砚',   'gggggggggg----'],
+      ['孙可',   'ggggggyngn----'],
+      ['何舟',   'ggyggggggg----'],
+    ]},
+    { name: '第二组 · 带教：张镓奇', members: [
+      ['顾盼',   'gggggggggg----'],
+      ['罗一帆', 'gggggygggg----'],
+      ['唐果',   'gggggggggg----'],
+      ['宋岚',   'gygggggggg----'],
+      ['高翔',   'ggggggnggn----'],
+    ]},
+  ];
+  const cls = { g: 'g', y: 'y', n: 'n', '-': '' };
+  let html = '<tr><th style="text-align:left;padding-right:14px">新人</th>' +
+    days.map(([d, w], i) => `<th class="day">${d}<span class="wd">${w}</span></th>`).join('') + '</tr>';
+  groups.forEach(g => {
+    html += `<tr class="grp"><td colspan="${days.length + 1}">▾ ${g.name}</td></tr>`;
+    g.members.forEach(([name, pat]) => {
+      html += `<tr><td class="who">${name}</td>` + days.map((_, i) => {
+        const c = cls[pat[i]] || '';
+        const style = c ? '' : 'visibility:hidden';
+        const today = i === todayIdx ? ' today' : '';
+        return `<td><span class="mdot ${c}${today}" style="${style}"></span></td>`;
+      }).join('') + '</tr>';
+    });
+  });
+  document.getElementById('mxTable').innerHTML = html;
+</script>
+</body>
+</html>

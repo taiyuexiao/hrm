@@ -28,7 +28,20 @@ public class UserDao {
     public void init() throws IOException {
         createTableIfNotExists();
         migrateAddPasswordPlainColumn();
+        migrateAddDailyColumns();
         migrateFromJsonIfNeeded();
+    }
+
+    /** 为已有数据库补充日报系统相关列（不存在时）：daily_role / group_id / mentor */
+    private void migrateAddDailyColumns() {
+        for (String col : new String[]{"daily_role TEXT", "group_id TEXT", "mentor TEXT"}) {
+            try {
+                jdbcTemplate.execute("ALTER TABLE users ADD COLUMN " + col);
+                System.out.println("✅ users 表新增列 " + col);
+            } catch (Exception ignored) {
+                // 列已存在，忽略
+            }
+        }
     }
 
     /** 为已有数据库补充 password_plain 列（不存在时） */
@@ -125,8 +138,8 @@ public class UserDao {
         } catch (Exception ignored) {}
 
         jdbcTemplate.update("""
-            INSERT INTO users (username, password, name, role, dept, status, permissions, password_plain)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO users (username, password, name, role, dept, status, permissions, password_plain, daily_role, group_id, mentor)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
                 user.getUsername(),
                 user.getPassword(),
@@ -135,7 +148,10 @@ public class UserDao {
                 user.getDept(),
                 user.getStatus() != null ? user.getStatus() : 1,
                 permsJson,
-                user.getPasswordPlain()
+                user.getPasswordPlain(),
+                user.getDailyRole(),
+                user.getGroupId(),
+                user.getMentor()
         );
     }
 
@@ -162,7 +178,7 @@ public class UserDao {
         } catch (Exception ignored) {}
 
         jdbcTemplate.update("""
-            UPDATE users SET name = ?, role = ?, dept = ?, status = ?, permissions = ?
+            UPDATE users SET name = ?, role = ?, dept = ?, status = ?, permissions = ?, daily_role = ?, group_id = ?, mentor = ?
             WHERE username = ?
             """,
                 user.getName(),
@@ -170,6 +186,9 @@ public class UserDao {
                 user.getDept(),
                 user.getStatus(),
                 permsJson,
+                user.getDailyRole(),
+                user.getGroupId(),
+                user.getMentor(),
                 user.getUsername()
         );
     }
@@ -212,6 +231,13 @@ public class UserDao {
             user.setPasswordPlain(rs.getString("password_plain"));
         } catch (SQLException ignored) {
             // 老库无此列
+        }
+        try {
+            user.setDailyRole(rs.getString("daily_role"));
+            user.setGroupId(rs.getString("group_id"));
+            user.setMentor(rs.getString("mentor"));
+        } catch (SQLException ignored) {
+            // 老库无日报相关列
         }
 
         String permsJson = rs.getString("permissions");

@@ -262,7 +262,10 @@ export const authApi = {
   },
   // 管理员账号管理
   listUsers: () => request<{ success: boolean; users?: any[]; message?: string }>('/auth/users'),
-  createUser: (user: { username: string; password: string; name: string; role: string; dept: string }) =>
+  createUser: (user: {
+    username: string; password: string; name: string; role: string; dept?: string;
+    dailyRole?: string; groupId?: string; mentor?: string;
+  }) =>
     request<{ success: boolean; message?: string }>('/auth/users', {
       method: 'POST',
       body: JSON.stringify(user),
@@ -271,7 +274,10 @@ export const authApi = {
     request<{ success: boolean; message?: string }>(`/auth/users/${username}`, {
       method: 'DELETE',
     }),
-  updateUser: (username: string, data: { newUsername?: string; name?: string; role?: string; dept?: string }) =>
+  updateUser: (username: string, data: {
+    newUsername?: string; name?: string; role?: string; dept?: string;
+    dailyRole?: string; groupId?: string; mentor?: string;
+  }) =>
     request<{ success: boolean; message?: string }>(`/auth/users/${username}`, {
       method: 'PUT',
       body: JSON.stringify(data),

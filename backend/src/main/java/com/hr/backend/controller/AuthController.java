@@ -82,6 +82,9 @@ public class AuthController {
         userMap.put("dept", existingUser.getDept());
         userMap.put("status", existingUser.getStatus());
         userMap.put("permissions", existingUser.getPermissions() != null ? existingUser.getPermissions() : List.of());
+        userMap.put("dailyRole", existingUser.getDailyRole());
+        userMap.put("groupId", existingUser.getGroupId());
+        userMap.put("mentor", existingUser.getMentor());
 
         result.put("success", true);
         result.put("token", token);
@@ -205,6 +208,9 @@ public class AuthController {
             map.put("status", u.getStatus());
             map.put("permissions", u.getPermissions() != null ? u.getPermissions() : List.of());
             map.put("passwordPlain", u.getPasswordPlain());
+            map.put("dailyRole", u.getDailyRole());
+            map.put("groupId", u.getGroupId());
+            map.put("mentor", u.getMentor());
             list.add(map);
         }
         result.put("success", true);
@@ -243,10 +249,29 @@ public class AuthController {
         if (user.getDept() == null) user.setDept("");
         user.setStatus(1);
 
-        // 校验角色
-        if (!Set.of("user", "leader", "admin").contains(user.getRole())) {
+        // 校验角色（daily = 新人日报系统纯日报账号，详见 docs/modules/new-employee-daily.md）
+        if (!Set.of("user", "leader", "admin", "daily").contains(user.getRole())) {
             result.put("success", false);
-            result.put("message", "无效的角色，仅支持 user/leader/admin");
+            result.put("message", "无效的角色，仅支持 user/leader/admin/daily");
+            return result;
+        }
+
+        // daily 账号必须指定日报身份（新人/带教老师），不需要科室
+        if ("daily".equals(user.getRole())) {
+            if (!Set.of("newbie", "mentor").contains(user.getDailyRole())) {
+                result.put("success", false);
+                result.put("message", "日报账号必须指定日报身份（newbie 新人 / mentor 带教老师）");
+                return result;
+            }
+            if ("newbie".equals(user.getDailyRole()) && (user.getGroupId() == null || user.getGroupId().isBlank())) {
+                result.put("success", false);
+                result.put("message", "新人必须分配小组");
+                return result;
+            }
+        } else if (user.getDailyRole() != null && !user.getDailyRole().isBlank()
+                && !Set.of("newbie", "mentor", "leader").contains(user.getDailyRole())) {
+            result.put("success", false);
+            result.put("message", "无效的日报身份，仅支持 newbie/mentor/leader");
             return result;
         }
 
@@ -279,6 +304,10 @@ public class AuthController {
         String newName = body.get("name");
         String newRole = body.get("role");
         String newDept = body.get("dept");
+        // 日报系统字段：null=不修改，空字符串=清除
+        String newDailyRole = body.get("dailyRole");
+        String newGroupId = body.get("groupId");
+        String newMentor = body.get("mentor");
 
         User user = userDao.findByUsername(username);
         if (user == null) {
@@ -333,6 +362,25 @@ public class AuthController {
                 return result;
             }
             user.setDept(newDept);
+            changed = true;
+        }
+
+        // 日报系统身份调整（newbie/mentor/leader，空字符串表示清除）
+        if (newDailyRole != null && !newDailyRole.equals(user.getDailyRole() != null ? user.getDailyRole() : "")) {
+            if (!newDailyRole.isEmpty() && !Set.of("newbie", "mentor", "leader").contains(newDailyRole)) {
+                result.put("success", false);
+                result.put("message", "无效的日报身份，仅支持 newbie/mentor/leader");
+                return result;
+            }
+            user.setDailyRole(newDailyRole.isEmpty() ? null : newDailyRole);
+            changed = true;
+        }
+        if (newGroupId != null && !newGroupId.equals(user.getGroupId() != null ? user.getGroupId() : "")) {
+            user.setGroupId(newGroupId.isEmpty() ? null : newGroupId);
+            changed = true;
+        }
+        if (newMentor != null && !newMentor.equals(user.getMentor() != null ? user.getMentor() : "")) {
+            user.setMentor(newMentor.isEmpty() ? null : newMentor);
             changed = true;
         }
 
@@ -536,6 +584,11 @@ public class AuthController {
                     "VIEW_ACTION_LOGS", "VIEW_SUBMISSIONS", "KNOWLEDGE_BASE"
             ));
             return leader;
+        }
+
+        // daily（新人日报系统纯日报账号）：不授予任何周报系统权限
+        if ("daily".equals(role)) {
+            return new ArrayList<>();
         }
 
         return new ArrayList<>(userBase);
