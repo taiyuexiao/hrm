@@ -43,6 +43,23 @@ def strip_junk_nodes(nodes) -> bool:
     return changed
 
 
+def strip_empty_text_nodes(nodes) -> bool:
+    """就地删除空文本任务节点（text 空白；子任务上提），返回是否有改动"""
+    changed = False
+    i = 0
+    while i < len(nodes):
+        n = nodes[i]
+        if isinstance(n.get('text'), str) and n['text'].strip() == '':
+            children = n.get('children') or []
+            nodes[i:i + 1] = children
+            changed = True
+            continue
+        if strip_empty_text_nodes(n.get('children') or []):
+            changed = True
+        i += 1
+    return changed
+
+
 def tree_has_garble(nodes) -> bool:
     for n in nodes or []:
         if looks_garbled_text(n.get('text', '')):
@@ -145,16 +162,46 @@ def main():
 
     scanned = garbled = repaired = failed = 0
     failed_rows = []
+    textfield_fixed = 0
     for row in rows:
         scanned += 1
+
+        # 第三阶段：文本字段 current_work/plan 若为原始 JSON 任务数组 → 改写为格式化文本
+        tf_changed = False
+        new_cw, new_plan = row['current_work'], row['plan']
+        for field in ('current_work', 'plan'):
+            v = (row[field] or '').strip()
+            if v.startswith('['):
+                parsed = parse_tasks(v)
+                if parsed:
+                    if field == 'current_work':
+                        new_cw = format_tasks(parsed)
+                    else:
+                        new_plan = format_tasks(parsed)
+                    tf_changed = True
+                elif v in ('[]', '[ ]'):
+                    # 空数组字符串 → 直接置空
+                    if field == 'current_work':
+                        new_cw = ''
+                    else:
+                        new_plan = ''
+                    tf_changed = True
+        if tf_changed:
+            textfield_fixed += 1
+            if APPLY:
+                conn.execute(
+                    "UPDATE weekly_reports SET current_work = ?, plan = ? WHERE id = ?",
+                    (new_cw, new_plan, row['id']),
+                )
+
         try:
             content = json.loads(row['content'] or '[]')
         except Exception:
             continue
         if not isinstance(content, list):
             continue
-        # 第二阶段：清理 '[]' 空数组垃圾任务
-        if strip_junk_nodes(content):
+        # 第二阶段：清理 '[]' 空数组垃圾任务与空文本任务
+        if strip_junk_nodes(content) or strip_empty_text_nodes(content):
             garbled += 1
             if APPLY:
                 conn.execute(
@@ -163,7 +210,7 @@ def main():
                 )
             repaired += 1
             if not APPLY:
-                print(f"  可清理空数组垃圾任务 {row['week_label']} {row['dept']}")
+                print(f"  可清理垃圾/空文本任务 {row['week_label']} {row['dept']}")
             continue
         if not tree_has_garble(content):
             continue
@@ -190,6 +237,7 @@ def main():
     if APPLY:
         conn.commit()
     print(f"\n扫描 {scanned} 行，乱码 {garbled} 行，{'已修复' if APPLY else '可修复(dry-run)'} {repaired} 行，无法自动修复 {failed} 行")
+    print(f"文本字段 JSON 转格式化文本：{textfield_fixed} 行（{'已执行' if APPLY else 'dry-run'}）")
     for w, d in failed_rows:
         print(f"  ⚠️ 需人工处理：{w} {d}")
     conn.close()
