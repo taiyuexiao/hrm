@@ -171,8 +171,8 @@ test.describe('15 周报与带教报告', () => {
     await expect(page.getByRole('cell', { name: `🧑‍🏫 ${MENTOR.name}` })).toBeVisible();
     await expect(page.locator('td', { hasText: '1/2' })).toBeVisible();
 
-    // 点击小组周报已提交圆点 → 跳浏览定位到该报告（缺交灰点无跳转，故限定「补交」）
-    await page.locator('span[title*="小组周报"][title*="补交"]').first().click();
+    // 点击小组周报已提交圆点 → 跳浏览定位到该报告（已交/补交均可；缺交灰点无跳转）
+    await page.locator('span[title*="小组周报：已"], span[title*="小组周报：补"]').first().click();
     await expect(page.locator('text=E2E小组任务内容')).toBeVisible({ timeout: 10000 });
   });
 });

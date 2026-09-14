@@ -505,8 +505,11 @@ public class DailyReportController {
         r.put("entries", entries);
 
         // mentor 提交区块数据：区间内周报 + 覆盖月份的月报（原始行，判定在前端）
+        // 周报区间向后延 7 天：覆盖「本周五」周期（看板要显示 mentor 正在填的本周报告）
+        String mentorTo = java.time.LocalDate.parse(to, java.time.format.DateTimeFormatter.BASIC_ISO_DATE)
+                .plusDays(7).format(java.time.format.DateTimeFormatter.BASIC_ISO_DATE);
         List<Map<String, Object>> mentorRows = new ArrayList<>();
-        for (Map<String, Object> m : dailyDao.findMentorReportsInRange("weekly", from, to)) {
+        for (Map<String, Object> m : dailyDao.findMentorReportsInRange("weekly", from, mentorTo)) {
             mentorRows.add(enrichMentor(m));
         }
         for (Map<String, Object> m : dailyDao.findMentorReportsInRange("monthly", from.substring(0, 6), to.substring(0, 6))) {

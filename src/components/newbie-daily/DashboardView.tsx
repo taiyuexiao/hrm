@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { DatePicker, Segmented, Spin, message } from 'antd';
 import dayjs, { Dayjs } from 'dayjs';
 import {
-  dailyApi, toPeriod, monthPeriod, DashboardEntry, DashboardMentorItem, DailyMeta,
+  dailyApi, toPeriod, fridayOf, monthPeriod, DashboardEntry, DashboardMentorItem, DailyMeta,
 } from '../../services/dailyApi';
 import { BrowseTarget } from './BrowseView';
 
@@ -127,11 +127,19 @@ const DashboardView: React.FC<DashboardViewProps> = ({ onOpenReport, meta }) => 
   }, [meta]);
 
   // ===== 带教报告提交区块（周/月报） =====
-  const fridays = useMemo(() => days.filter(d => d.day() === 5), [days]);
   const monthPeriodValue = monthPeriod(month.toDate());
   const currentMonthPeriod = monthPeriod(today.toDate());
-  const latestFriday = fridays.length > 0 ? toPeriod(fridays[fridays.length - 1].toDate()) : null;
-
+  // 周五列覆盖到「本周五」为止（含未到期）：mentor 正在填的就是本周报告，缺交会随周五到期才判定
+  const currentFridayPeriod = fridayOf(today.toDate());
+  const fridays = useMemo(() => {
+    const fs = days.filter(d => d.day() === 5);
+    if (monthPeriod(month.toDate()) === currentMonthPeriod
+        && !fs.some(d => toPeriod(d.toDate()) === currentFridayPeriod)) {
+      const cf = new Date(+currentFridayPeriod.slice(0, 4), +currentFridayPeriod.slice(4, 6) - 1, +currentFridayPeriod.slice(6, 8));
+      fs.push(dayjs(cf));
+    }
+    return fs;
+  }, [days, month, currentMonthPeriod, currentFridayPeriod]);
   const mentorCellOf = (mentorUsername: string, type: 'weekly' | 'monthly', period: string) => {
     const r = mentorReports.find(
       m => m.mentor === mentorUsername && m.reportType === type && m.scope === 'group' && m.period === period,
@@ -141,18 +149,18 @@ const DashboardView: React.FC<DashboardViewProps> = ({ onOpenReport, meta }) => 
       return { state: (submitDay <= period ? 'ontime' : 'late') as CellState, report: r };
     }
     if (r) return { state: 'draft' as CellState, report: r };
-    const due = type === 'weekly' ? period < todayPeriod : period < currentMonthPeriod;
+    // 周报以周五为期限：本周五未到期不算缺交；月报以月末为期限
+    const due = type === 'weekly' ? period < currentFridayPeriod : period < currentMonthPeriod;
     return { state: (due ? 'missing' : 'future') as CellState, report: null };
   };
 
   const personCount = (mentorUsername: string) => {
     const total = (meta?.newbies || []).filter(n => n.mentor === mentorUsername).length;
-    const done = latestFriday
-      ? mentorReports.filter(
-          m => m.mentor === mentorUsername && m.scope === 'person'
-            && m.reportType === 'weekly' && m.period === latestFriday && m.status === 'submitted',
-        ).length
-      : 0;
+    // 统计「本周五」周期的个人报告（mentor 正在填的就是本周，与周五列口径一致）
+    const done = mentorReports.filter(
+      m => m.mentor === mentorUsername && m.scope === 'person'
+        && m.reportType === 'weekly' && m.period === currentFridayPeriod && m.status === 'submitted',
+    ).length;
     return { done, total };
   };
 

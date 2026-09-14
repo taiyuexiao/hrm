@@ -24,12 +24,12 @@ import { WeeklyReport, User, SYSTEM_USERS, sortByDeptOrder, Comment, TaskItem } 
 import { useDepts, getDeptsSnapshot } from '../../services/deptStore';
 import {
   getCurrentUser, getReport, getReports, saveReport,
-  canEditDept, genId, initDemoData, getPrevWeekReport, parsePlanToTasks, DEFAULT_WEEK,
+  canEditDept, genId, initDemoData, getPrevWeekReport, DEFAULT_WEEK,
   hasPermission, isSuperAdmin,
   formatWeekLabel, getReportsByWeek, getDynamicWeekOptions, getNextWeekLabel,
   getCurrentFridayWeekLabel, getPrevWeekLabel,
   flattenTasks, deleteTaskFromTree, updateTaskInTree, findTaskInTree, parseNextPlan,
-  formatTaskNodeForExport, reportHasContent,
+  formatTaskNodeForExport, formatTasksForExport, reportHasContent,
   fetchReportDetail, submitReportApi, createNextWeekGlobally, deleteWeekReports,
   addCommentApi, addReplyApi, deleteCommentApi, deleteReplyApi, toggleResolvedApi,
   loadDraft, saveDraft, clearDraft, applyDraftToReport,
@@ -639,8 +639,11 @@ const WeeklyReportV2: React.FC = () => {
   }, [report?.weekLabel, report?.dept]);
 
   // 下周工作计划任务树变化时同步回 report.nextPlan
+  // 守卫：仅真实用户编辑时同步。加载时 setNextPlanTasks 也会触发本效应，
+  // 若不加守卫会把 report.nextPlan（''）与 JSON（'[]'）判为不一致 → handleChange
+  // → isUserEditingRef=true → 自动保存落库（周末懒创建报告被自动持久化的根因）
   useEffect(() => {
-    if (!report) return;
+    if (!report || !isUserEditingRef.current) return;
     const json = JSON.stringify(nextPlanTasks);
     if (report.nextPlan !== json) {
       handleChange('nextPlan', json);
@@ -828,7 +831,11 @@ const WeeklyReportV2: React.FC = () => {
     } else {
       // 获取上周计划，自动填充为本周任务列表
       const prevReport = getPrevWeekReport(selectedWeek, selectedDept);
-      const defaultTasks = prevReport ? parsePlanToTasks(prevReport.nextPlan) : [];
+      // nextPlan 是 JSON 序列化的任务树，必须用 JSON 感知的 parseNextPlan；
+      // 用纯文本解析器 parsePlanToTasks 会把 JSON 原文拆成乱码任务（历史 BUG）
+      const defaultTasks = prevReport ? parseNextPlan(prevReport.nextPlan) : [];
+      // currentWork/plan 是给人看的文本字段：存格式化文本，绝不存原始 JSON
+      const defaultText = formatTasksForExport(defaultTasks);
       // 创建新周报
       initialReport = {
         id: genId(),
@@ -836,9 +843,9 @@ const WeeklyReportV2: React.FC = () => {
         dept: selectedDept,
         authorId: currentUser.id,
         authorName: currentUser.name,
-        plan: prevReport ? prevReport.nextPlan : '',
+        plan: defaultText,
         content: defaultTasks,
-        currentWork: prevReport ? prevReport.nextPlan : '',
+        currentWork: defaultText,
         nextPlan: '',
         thoughts: '',
         other: '',
@@ -895,11 +902,13 @@ const WeeklyReportV2: React.FC = () => {
     const nextWeekReport = getReport(nextWeekLabel, currentReport.dept);
     if (nextWeekReport) {
       const nextPlanTasks = parseNextPlan(currentReport.nextPlan);
+      // currentWork/plan 是文本字段：存格式化文本，不存原始 JSON
+      const nextPlanText = formatTasksForExport(nextPlanTasks);
       const updatedNextWeek: WeeklyReport = {
         ...nextWeekReport,
         content: JSON.parse(JSON.stringify(nextPlanTasks)),
-        currentWork: currentReport.nextPlan,
-        plan: currentReport.nextPlan,
+        currentWork: nextPlanText,
+        plan: nextPlanText,
         updatedAt: new Date().toISOString(),
       };
       saveReport(updatedNextWeek);

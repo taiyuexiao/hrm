@@ -54,6 +54,7 @@
 
 | 日期 | 类型 | 摘要 | 涉及模块 |
 |---|---|---|---|
+| 2026-09-14 | 修复 | 周报继承乱码+周末自动创建：懒创建改 JSON 感知解析、currentWork/plan 存格式化文本、nextPlan 同步效应加编辑守卫、存量乱码数据修复（`scripts/repair_inherited_garble.py`）；e2e 16 新增（[BUG-003](modules/weekly-report-v2.md#bug-003-周末自动创建下周周报且本周工作内容乱码2026-09-14已解决)）；顺带修正日报看板带教区块跨周口径 | 周报管理 v2、新人培养报告 |
 | 2026-09-13 | 新增 | 新人培养报告模块第一期：daily 角色 + daily_role/group_id/mentor 账号字段、`/api/daily/**`（4 张新表）、日报填报（解析填入/自动保存/提交）、浏览批注/回复/已读/通知、双系统登录选择页与侧边栏入口、账号管理支持 daily 账号与小组管理；e2e 13 新增，全量 24/24（[文档](modules/new-employee-daily.md)） | 新人培养报告、用户与权限管理 |
 | 2026-09-13 | 新增 | 新人日报第二期：点阵看板（`/daily/dashboard`，月视图绿/黄/灰圆点+点击跳浏览）+ 补交提醒（`/daily/missing`，登录横幅跳最早缺交日）；修复看板跳浏览竞态（[BUG-002](modules/new-employee-daily.md#bug-002-看板跳浏览显示尚未填写2026-09-13已解决)）；e2e 14 新增，全量 26/26 | 新人培养报告 |
 | 2026-09-13 | 新增 | 新人日报第三期：新人周/月报、mentor 小组/个人带教报告（mentor_reports 表 + 两套模板 + 对象强校验）、AI 总结/完成度（复用 LlmService）、看板带教提交区块、划词批注、mentor 补交提醒；e2e 15 新增，全量 29/29（[文档](modules/new-employee-daily.md)） | 新人培养报告 |

@@ -779,6 +779,8 @@ export function createNextWeekGlobally(
 
     const prevReport = getPrevWeekReport(nextWeek, dept);
     const defaultTasks = prevReport ? parseNextPlan(prevReport.nextPlan) : [];
+    // currentWork/plan 是文本字段：存格式化文本，不存原始 JSON（历史 BUG：塞 JSON 导致导出/AI/提交详情乱码）
+    const defaultText = formatTasksForExport(defaultTasks);
     const newReport: WeeklyReport = {
       id: genId(),
       weekLabel: nextWeek,
@@ -786,9 +788,9 @@ export function createNextWeekGlobally(
       // 继承上周作者，避免管理员创建下周时把 author 改成自己
       authorId: prevReport ? prevReport.authorId : currentUser.id,
       authorName: prevReport ? prevReport.authorName : currentUser.name,
-      plan: prevReport ? prevReport.nextPlan : '',
+      plan: defaultText,
       content: defaultTasks,
-      currentWork: prevReport ? prevReport.nextPlan : '',
+      currentWork: defaultText,
       nextPlan: '',
       thoughts: '',
       other: '',

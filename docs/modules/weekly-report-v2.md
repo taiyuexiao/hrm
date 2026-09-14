@@ -47,10 +47,22 @@
 - 解决方式：`WeeklyReportV2.tsx` 顶栏 Select 删除 `dropdownRender`，改用原生 `options` + `optionRender` 渲染行内容，加 `showSearch` + `filterWeekOption`（同时匹配 `2026-07-02` 和 `20260702`）；options 数组 `useMemo` 缓存；`styles.css` 中 `.custom-week-dropdown/.custom-week-option` 样式删除，新增 `.week-option-row/.week-option-delete`；e2e 的 `selectWeek` 与 02/06 用例改为搜索过滤定位
 - 验证方式：`npx tsc --noEmit`、`vite build` 通过；`e2e` 02（周下拉）与 06（周期管理与回收站）全绿；全量 e2e 中所有 `selectWeek` 调用方（03/04/05/09/10）通过
 
+### BUG-003 周末自动创建下周周报且「本周工作内容」乱码（2026-09-14，已解决）
+- 错误行为：WHEN 周末打开系统（或打开一个无数据的未来周期）THEN 系统自动创建下周周报，且继承来的「本周工作内容」是 `[{"id":"...","text":"...","checked":false,...}]` 式 JSON 原文乱码任务
+- 期望行为：WHEN 打开无数据的周期 THEN 系统 SHALL 把上周「下周工作计划」继承为干净的任务树（含层级/子任务），且 SHALL NOT 在用户真实编辑前自动落库
+- 不可破坏的行为：WHEN 手动点「新建下周报」/ 提交本周周报 THEN 系统 SHALL CONTINUE TO 走 `createNextWeekGlobally` / `syncNextWeek` 继承逻辑；WHEN 用户真实编辑 THEN 自动保存 SHALL CONTINUE TO 1 秒内落库
+- 根因（三缺陷叠加）：
+  1. 乱码：懒创建路径（`WeeklyReportV2.tsx` 无报告时初始化）用纯文本解析器 `parsePlanToTasks` 解析 JSON 序列化的 `nextPlan`（按钮路径用的是 JSON 感知的 `parseNextPlan`，所以手动创建不出问题——这也是此前排查未复现的原因）
+  2. 周末自动创建：`getCurrentFridayWeekLabel` 周六日返回下周五 → 默认选中无数据的下周 → 懒创建；且「nextPlan 任务树同步效应」无守卫，加载时把 `''` 与 `'[]'` 判为不一致 → 误触发 `handleChange` → `isUserEditingRef=true` → 自动保存落库
+  3. 次生污染：懒创建/`createNextWeekGlobally`/`syncNextWeek` 三处把 `currentWork`/`plan` 文本字段赋值为原始 JSON 字符串，导致导出/AI 总结/提交详情出现乱码片段
+- 解决方式：①懒创建改 `parseNextPlan`；②三处 `currentWork`/`plan` 改存 `formatTasksForExport(tasks)` 格式化文本（与 ImportReportsModal 的 `tasksToText` 口径一致）；③nextPlan 同步效应加 `isUserEditingRef` 守卫；④存量数据：`scripts/repair_inherited_garble.py` 扫出乱码行并从 `current_work` 的原始 JSON 重建任务树（本库 246 行中 1 行乱码已修复，执行前已备份 hr.db）
+- 验证方式：`npx tsc --noEmit` 通过；新增 `e2e/tests/16-week-inherit.spec.ts`（打开无数据未来周 → 继承干净任务树且无 JSON 碎片 → 3 秒后确认后端未自动落库）；全量回归 30/30 通过
+
 ## 已知限制与待办
 
-- [ ] e2e 07（提交）与 11（回收站 URL 跳转）存在**与本次改动无关的既有失败**，疑似测试周期 `TEST_WEEK=20260904` 已变成过去周导致的时间敏感问题（06 已修复为动态未来周 `futureFridayLabel`，07/11 未跟进）
+- [ ] ~~e2e 07/11 写死周期过期~~（2026-09-13 已修复为动态未来周）
 - [ ] 主界面单文件 3500+ 行，后续可拆分子组件
+- [ ] 「下周计划→本周内容」的继承目前是全量覆盖式同步（`syncNextWeek`），若下一周已被人工改动会被覆盖，后续可考虑增量合并
 
 | 2026-09-13 | 科室清单动态化：DEPTS 改走 deptStore（[见 department-management](department-management.md)） | — |
 
@@ -60,3 +72,4 @@
 |---|---|---|
 | 2026-09-13 | 科室清单动态化，URL dept 深链接等清单加载 | 新需求：科室管理 |
 | 2026-09-13 | 周期下拉改原生虚拟滚动 + optionRender + 搜索；e2e 02/06/fixtures 适配 | BUG-001 |
+| 2026-09-14 | 懒创建继承改用 JSON 感知解析 + currentWork/plan 存格式化文本 + nextPlan 同步效应加编辑守卫 + 存量乱码数据修复脚本 | BUG-003 |
