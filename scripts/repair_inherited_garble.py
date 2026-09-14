@@ -21,6 +21,28 @@ def looks_garbled_text(t: str) -> bool:
     return isinstance(t, str) and ('{"id"' in t or '"checked"' in t or t.lstrip().startswith('[{'))
 
 
+def is_junk_text(t: str) -> bool:
+    """空数组残留：text 为 '[]'/'[ ]' 的垃圾任务（历史遗留，20260814/20260918 项目管理）"""
+    return isinstance(t, str) and t.strip() in ('[]', '[ ]')
+
+
+def strip_junk_nodes(nodes) -> bool:
+    """就地删除垃圾任务节点（若有子任务则上提），返回是否有改动"""
+    changed = False
+    i = 0
+    while i < len(nodes):
+        n = nodes[i]
+        if is_junk_text(n.get('text', '')):
+            children = n.get('children') or []
+            nodes[i:i + 1] = children
+            changed = True
+            continue
+        if strip_junk_nodes(n.get('children') or []):
+            changed = True
+        i += 1
+    return changed
+
+
 def tree_has_garble(nodes) -> bool:
     for n in nodes or []:
         if looks_garbled_text(n.get('text', '')):
@@ -129,7 +151,21 @@ def main():
             content = json.loads(row['content'] or '[]')
         except Exception:
             continue
-        if not isinstance(content, list) or not tree_has_garble(content):
+        if not isinstance(content, list):
+            continue
+        # 第二阶段：清理 '[]' 空数组垃圾任务
+        if strip_junk_nodes(content):
+            garbled += 1
+            if APPLY:
+                conn.execute(
+                    "UPDATE weekly_reports SET content = ?, updated_at = datetime('now') WHERE id = ?",
+                    (json.dumps(content, ensure_ascii=False), row['id']),
+                )
+            repaired += 1
+            if not APPLY:
+                print(f"  可清理空数组垃圾任务 {row['week_label']} {row['dept']}")
+            continue
+        if not tree_has_garble(content):
             continue
         garbled += 1
 

@@ -222,6 +222,17 @@ public class ReportService {
             Map<String, Object> task = tasks.get(i);
             Object text = task.get("text");
             if (text instanceof String) {
+                String trimmed = ((String) text).trim();
+                // 空数组残留垃圾任务（'[]'）：删除节点，子任务上提
+                if ("[]".equals(trimmed) || "[ ]".equals(trimmed)) {
+                    tasks.remove(i);
+                    Object children = task.get("children");
+                    if (children instanceof List) {
+                        tasks.addAll(i, castTaskList(children));
+                    }
+                    i--;
+                    continue;
+                }
                 List<Map<String, Object>> parsed = tryParseTaskArray((String) text);
                 if (parsed != null) {
                     tasks.remove(i);
