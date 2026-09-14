@@ -57,6 +57,7 @@
   3. 次生污染：懒创建/`createNextWeekGlobally`/`syncNextWeek` 三处把 `currentWork`/`plan` 文本字段赋值为原始 JSON 字符串，导致导出/AI 总结/提交详情出现乱码片段
 - 解决方式：①懒创建改 `parseNextPlan`；②三处 `currentWork`/`plan` 改存 `formatTasksForExport(tasks)` 格式化文本（与 ImportReportsModal 的 `tasksToText` 口径一致）；③nextPlan 同步效应加 `isUserEditingRef` 守卫；④存量数据：`scripts/repair_inherited_garble.py` 扫出乱码行并从 `current_work` 的原始 JSON 重建任务树（本库 246 行中 1 行乱码已修复，执行前已备份 hr.db）
 - 验证方式：`npx tsc --noEmit` 通过；新增 `e2e/tests/16-week-inherit.spec.ts`（打开无数据未来周 → 继承干净任务树且无 JSON 碎片 → 3 秒后确认后端未自动落库）；全量回归 30/30 通过
+- **复发与追加防线（2026-09-14 下午）**：上午修复后乱码于 13:40 复发——旧浏览器的 localStorage 里存着修复前的乱码草稿（任务 id 时间戳 9/12），用户打开页面触发草稿恢复/自动保存把乱码写回。追加两道措施：①`ReportService.saveReport` 增加**服务端保存自愈**：任务文本若能完整解析为任务数组则自动还原为任务树，`currentWork`/`plan` 若为 JSON 任务数组则改写为格式化文本（任何旧客户端/旧草稿/脚本提交乱码都会被服务端兜底，已用模拟旧客户端请求验证）；②再次执行 `repair_inherited_garble.py` 修复复发行。**注意：旧浏览器标签页需硬刷新（Cmd+Shift+R）加载新前端，草稿恢复弹窗若内容是乱码应选「不恢复」**
 
 ## 已知限制与待办
 

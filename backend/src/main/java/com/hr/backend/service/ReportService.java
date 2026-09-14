@@ -203,10 +203,99 @@ public class ReportService {
         return count != null && count > 0;
     }
 
+    // ========== BUG-003 保存自愈：乱码任务还原 ==========
+
+    /** content 任务树自愈：任务文本若能完整解析为任务数组，用解析结果替换该节点 */
+    private void sanitizeContent(Object contentObj) {
+        if (contentObj instanceof List) {
+            sanitizeTaskList(castTaskList(contentObj));
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    private List<Map<String, Object>> castTaskList(Object obj) {
+        return (List<Map<String, Object>>) obj;
+    }
+
+    private void sanitizeTaskList(List<Map<String, Object>> tasks) {
+        for (int i = 0; i < tasks.size(); i++) {
+            Map<String, Object> task = tasks.get(i);
+            Object text = task.get("text");
+            if (text instanceof String) {
+                List<Map<String, Object>> parsed = tryParseTaskArray((String) text);
+                if (parsed != null) {
+                    tasks.remove(i);
+                    tasks.addAll(i, parsed);
+                    i--;
+                    continue;
+                }
+            }
+            Object children = task.get("children");
+            if (children instanceof List) {
+                sanitizeTaskList(castTaskList(children));
+            }
+        }
+    }
+
+    /** currentWork/plan 文本字段自愈：若内容是 JSON 任务数组，改写为格式化纯文本 */
+    private void sanitizeTextField(Map<String, Object> report, String field) {
+        Object v = report.get(field);
+        if (!(v instanceof String)) return;
+        List<Map<String, Object>> parsed = tryParseTaskArray((String) v);
+        if (parsed != null) {
+            report.put(field, formatTasksForExport(parsed));
+        }
+    }
+
+    /** 文本可完整解析为「元素均含 text 键的对象数组」时返回该数组，否则 null（不误伤正常文本） */
+    private List<Map<String, Object>> tryParseTaskArray(String text) {
+        String trimmed = text.trim();
+        if (!trimmed.startsWith("[") || trimmed.length() < 10) return null;
+        try {
+            Object v = objectMapper.readValue(trimmed, Object.class);
+            if (!(v instanceof List)) return null;
+            List<?> list = (List<?>) v;
+            if (list.isEmpty()) return null;
+            for (Object o : list) {
+                if (!(o instanceof Map) || !((Map<?, ?>) o).containsKey("text")) return null;
+            }
+            return castTaskList(list);
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    /** 与前端 formatTasksForExport 等效的简易格式化（自愈时给文本字段一个可读版本） */
+    private String formatTasksForExport(List<Map<String, Object>> tasks) {
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < tasks.size(); i++) {
+            formatTaskNode(tasks.get(i), 0, i, sb);
+        }
+        return sb.toString().trim();
+    }
+
+    private void formatTaskNode(Map<String, Object> node, int depth, int index, StringBuilder sb) {
+        String prefix = depth == 0 ? (index + 1) + ". " : (depth == 1 ? "（" + (index + 1) + "）" : (index + 1) + "）");
+        sb.append("  ".repeat(depth)).append(prefix).append(String.valueOf(node.getOrDefault("text", ""))).append('\n');
+        Object children = node.get("children");
+        if (children instanceof List) {
+            List<Map<String, Object>> list = castTaskList(children);
+            for (int i = 0; i < list.size(); i++) {
+                formatTaskNode(list.get(i), depth + 1, i, sb);
+            }
+        }
+    }
+
     public synchronized void saveReport(Map<String, Object> report) throws IOException {
         String weekLabel = (String) report.get("weekLabel");
         String dept = (String) report.get("dept");
         if (weekLabel == null || dept == null) return;
+
+        // 保存前自愈（BUG-003 防线）：旧浏览器缓存/旧 localStorage 草稿仍可能把
+        // nextPlan 的 JSON 原文作为任务文本提交，这里识别并还原为任务树
+        sanitizeContent(report.get("content"));
+        sanitizeTextField(report, "currentWork");
+        sanitizeTextField(report, "plan");
 
         String id = (String) report.getOrDefault("id", weekLabel + "-" + dept);
         report.put("id", id);
