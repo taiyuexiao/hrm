@@ -32,7 +32,7 @@ import {
   formatTaskNodeForExport, formatTasksForExport, reportHasContent,
   fetchReportDetail, submitReportApi, createNextWeekGlobally, deleteWeekReports,
   addCommentApi, addReplyApi, deleteCommentApi, deleteReplyApi, toggleResolvedApi,
-  loadDraft, saveDraft, clearDraft, applyDraftToReport,
+  loadDraft, saveDraft, clearDraft, applyDraftToReport, sameEditableContent,
   WeeklyReportDraft, isFrozenWeek, isWeekInRecycleBin,
 } from './data';
 import { getApiBaseUrl, getAppBasePath } from '../../config/app';
@@ -587,11 +587,15 @@ const WeeklyReportV2: React.FC = () => {
     if (!report) return;
     const reportToSave = { ...report, nextPlan: JSON.stringify(nextPlanTasks) };
     if (!reportHasContent(reportToSave)) return;
+    // 内容与服务器基准一致 = 没有未保存编辑（如自动保存已成功），不写草稿。
+    // 否则关页/切标签页都会留下草稿，下次打开必弹恢复提示（历史 BUG）
+    const base = baseReportRef.current;
+    if (base && sameEditableContent(reportToSave, base)) return;
     saveDraft({
       userId: currentUser.id,
       weekLabel: report.weekLabel,
       dept: report.dept,
-      baseUpdatedAt: baseReportRef.current?.updatedAt,
+      baseUpdatedAt: base?.updatedAt,
       savedAt: Date.now(),
       report: reportToSave,
     });
@@ -858,8 +862,10 @@ const WeeklyReportV2: React.FC = () => {
     // 检查本地草稿
     const draft = loadDraft(currentUser.id, selectedWeek, selectedDept);
     const hasDraftContent = draft && reportHasContent({ ...draft.report, nextPlan: JSON.stringify(parseNextPlan(draft.report.nextPlan)) } as WeeklyReport);
+    // 草稿内容与服务器一致（如自动保存已成功但草稿残留）→ 静默清除，不弹窗
+    const draftSameAsServer = !!draft && sameEditableContent(draft.report, initialReport);
     const serverUpdatedAt = initialReport.updatedAt;
-    const draftIsNewer = hasDraftContent && (
+    const draftIsNewer = hasDraftContent && !draftSameAsServer && (
       !serverUpdatedAt ||
       draft.savedAt > new Date(serverUpdatedAt).getTime() ||
       draft.baseUpdatedAt !== serverUpdatedAt

@@ -334,6 +334,25 @@ export function applyDraftToReport(base: WeeklyReport, draft: WeeklyReport): Wee
   };
 }
 
+/**
+ * 比较两份周报的用户可编辑内容是否一致（忽略 updatedAt/comments/submissions/AI 等元数据）。
+ * 用于草稿语义：内容与服务器基准一致 = 没有未保存编辑，不应写草稿/弹恢复提示。
+ */
+export function sameEditableContent(a: WeeklyReport, b: WeeklyReport): boolean {
+  const norm = (r: WeeklyReport) => ({
+    plan: r.plan || '',
+    currentWork: r.currentWork || '',
+    nextPlan: r.nextPlan || '',
+    thoughts: r.thoughts || '',
+    other: r.other || '',
+    content: JSON.stringify(r.content || []),
+  });
+  const x = norm(a);
+  const y = norm(b);
+  return x.plan === y.plan && x.currentWork === y.currentWork && x.nextPlan === y.nextPlan
+    && x.thoughts === y.thoughts && x.other === y.other && x.content === y.content;
+}
+
 export function isSuperAdmin(user: User | undefined | null): boolean {
   if (!user) return false;
   // 超级管理员按角色判断，不再绑定具体工号
