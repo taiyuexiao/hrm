@@ -49,65 +49,38 @@ interface NoticeItem {
   createdAt: string;
 }
 
-function calcNotices(reports: any[], userId: string, userDept: string): NoticeItem[] {
+/**
+ * 从全量评论轻量列表（/reports/comment-feed）派生通知：@提及、同部门评论/回复。
+ * 2026-09-15 性能优化：替代原先拉取 1.8MB 全量周报的做法。
+ */
+function calcNoticesFromFeed(feed: any[], userId: string, userDept: string): NoticeItem[] {
   const notices: NoticeItem[] = [];
-  for (const report of reports) {
-    for (const comment of report.comments || []) {
-      const isMentioned = comment.mentionIds?.includes(userId);
-      const isDeptComment = report.dept === userDept;
-      const isSelf = comment.authorId === userId;
+  for (const c of feed) {
+    if (c.authorId === userId) continue;
+    const isMentioned = (c.mentionIds || []).includes(userId);
+    const isDeptComment = c.dept === userDept;
+    const isReply = !!c.parentId;
 
-      if (!isSelf) {
-        if (isMentioned) {
-          notices.push({
-            id: `m-${comment.id}`,
-            type: 'mention',
-            title: `${comment.authorName} 在 ${report.dept} 周报中 @了你`,
-            desc: comment.content,
-            weekLabel: report.weekLabel,
-            dept: report.dept,
-            createdAt: comment.createdAt,
-          });
-        } else if (isDeptComment) {
-          notices.push({
-            id: `d-${comment.id}`,
-            type: 'dept_comment',
-            title: `${comment.authorName} 评论了 ${report.dept} 周报`,
-            desc: comment.content,
-            weekLabel: report.weekLabel,
-            dept: report.dept,
-            createdAt: comment.createdAt,
-          });
-        }
-      }
-
-      for (const reply of comment.replies || []) {
-        const replyMentions = (reply as any).mentionIds || [];
-        const isReplySelf = reply.authorId === userId;
-        if (isReplySelf) continue;
-
-        if (replyMentions.includes(userId)) {
-          notices.push({
-            id: `mr-${reply.id}`,
-            type: 'mention',
-            title: `${reply.authorName} 在回复中 @了你`,
-            desc: reply.content,
-            weekLabel: report.weekLabel,
-            dept: report.dept,
-            createdAt: reply.createdAt,
-          });
-        } else if (report.dept === userDept) {
-          notices.push({
-            id: `dr-${reply.id}`,
-            type: 'dept_comment',
-            title: `${reply.authorName} 回复了 ${report.dept} 周报`,
-            desc: reply.content,
-            weekLabel: report.weekLabel,
-            dept: report.dept,
-            createdAt: reply.createdAt,
-          });
-        }
-      }
+    if (isMentioned) {
+      notices.push({
+        id: `${isReply ? 'mr' : 'm'}-${c.id}`,
+        type: 'mention',
+        title: isReply ? `${c.authorName} 在回复中 @了你` : `${c.authorName} 在 ${c.dept} 周报中 @了你`,
+        desc: c.content,
+        weekLabel: c.weekLabel,
+        dept: c.dept,
+        createdAt: c.createdAt,
+      });
+    } else if (isDeptComment) {
+      notices.push({
+        id: `${isReply ? 'dr' : 'd'}-${c.id}`,
+        type: 'dept_comment',
+        title: isReply ? `${c.authorName} 回复了 ${c.dept} 周报` : `${c.authorName} 评论了 ${c.dept} 周报`,
+        desc: c.content,
+        weekLabel: c.weekLabel,
+        dept: c.dept,
+        createdAt: c.createdAt,
+      });
     }
   }
   return notices.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
@@ -126,12 +99,12 @@ function AppContent() {
   const loadNotices = useCallback(async () => {
     if (!authUser) return;
     try {
-      // 1. 从评论派生通知（@提及、同部门评论）
-      const reportsRes = await fetch(`${getApiBaseUrl()}/reports`, { headers: { 'Cache-Control': 'no-cache' } });
+      // 1. 从评论派生通知（@提及、同部门评论）——轻量端点，只含评论字段
+      const feedRes = await fetch(`${getApiBaseUrl()}/reports/comment-feed`, { headers: { 'Cache-Control': 'no-cache' } });
       let list: NoticeItem[] = [];
-      if (reportsRes.ok) {
-        const reports = await reportsRes.json();
-        list = calcNotices(reports, authUser.id, authUser.dept);
+      if (feedRes.ok) {
+        const feed = await feedRes.json();
+        list = calcNoticesFromFeed(feed, authUser.id, authUser.dept);
       }
       // 2. 从 notifications 表读取持久化通知（任务被覆盖/删除等）
       const notifyRes = await fetch(`${getApiBaseUrl()}/notifications?userId=${authUser.id}&unreadOnly=false`, { headers: { 'Cache-Control': 'no-cache' } });

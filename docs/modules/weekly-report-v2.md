@@ -39,6 +39,14 @@
 - 周报模块不再直接读 `types.ts` 的 `DEPTS`/`SORTED_DEPTS`（保留为 fallback），统一走 `src/services/deptStore.ts`：组件用 `useDepts()`，非组件代码（`createNextWeekGlobally`、导入科室匹配）用 `getDeptsSnapshot()`
 - 关键坑：URL `dept` 深链接校验必须等动态清单加载完成（见 department-management 模块文档「首屏时序」）
 
+### BUG-004 「发现未保存的本地编辑」弹窗误报频繁（2026-09-15，已解决）
+- 错误行为：WHEN 用户浏览过一份有内容的周报后关闭页面/切换标签页，下次打开 THEN 系统弹出草稿恢复弹窗（尽管没有任何未保存编辑）；编辑后自动保存已成功，下次打开仍弹
+- 期望行为：WHEN 本地没有真正未落库的编辑 THEN 系统 SHALL 不弹窗并静默清理残留草稿；WHEN 确有未保存编辑（如保存通道故障） THEN 系统 SHALL CONTINUE TO 弹窗供选择
+- 不可破坏的行为：自动保存成功后 SHALL CONTINUE TO 清理草稿并同步 base 快照；草稿在保存失败/离线时 SHALL CONTINUE TO 于 beforeunload 落盘保护
+- 根因：三处叠加——① `beforeunload`/`visibilitychange` 调用的 `saveCurrentDraft` 不判断是否有未保存编辑，关页必写草稿，`savedAt` 恒新于服务器 `updatedAt`；② 自动保存 1s 落库并清草稿后，3s 的草稿定时器又把已保存内容写回 localStorage；③ 恢复判断用时间戳（`savedAt > updatedAt` / `baseUpdatedAt !== updatedAt`）而非内容比对，残留草稿永远被误判为「较新」
+- 解决方式：`data.ts` 新增 `sameEditableContent`（只比 plan/currentWork/nextPlan/thoughts/other/content，忽略元数据）；`saveCurrentDraft` 加「内容与 base 快照一致则不写草稿」守卫；加载周报时草稿与服务器内容一致 → 静默 `clearDraft` 不弹窗
+- 验证方式：e2e `tests/13-draft-recovery.spec.ts`（纯浏览不弹 / 自动保存后不弹 / 保存故障时必弹且可丢弃恢复）
+
 ### BUG-001 周期下拉全量渲染导致卡顿（2026-09-13，已解决）
 - 错误行为：WHEN 周报周期增多后点开顶栏「周报周期」下拉 THEN 页面卡顿（所有周期一次性渲染为 DOM）
 - 期望行为：WHEN 点开周期下拉 THEN 系统 SHALL 只渲染可视区选项，滚动流畅，且支持输入过滤定位周期
@@ -76,3 +84,5 @@
 | 2026-09-13 | 科室清单动态化，URL dept 深链接等清单加载 | 新需求：科室管理 |
 | 2026-09-13 | 周期下拉改原生虚拟滚动 + optionRender + 搜索；e2e 02/06/fixtures 适配 | BUG-001 |
 | 2026-09-14 | 懒创建继承改用 JSON 感知解析 + currentWork/plan 存格式化文本 + nextPlan 同步效应加编辑守卫 + 存量乱码数据修复脚本 | BUG-003 |
+| 2026-09-15 | 性能优化：`App.tsx` 通知轮询从全量周报（1.8MB/30s/人）切换到 `GET /api/reports/comment-feed`（5.6KB）；后端 gzip 压缩、Hikari 池 1→10、SQLite WAL；容量结论：20-30 并发无压力 | 性能 |
+| 2026-09-15 | 草稿写盘/恢复判断改用内容比对（sameEditableContent），消除恢复弹窗误报；e2e 13 新增 | BUG-004 |

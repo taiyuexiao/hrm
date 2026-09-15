@@ -54,6 +54,8 @@
 
 | 日期 | 类型 | 摘要 | 涉及模块 |
 |---|---|---|---|
+| 2026-09-15 | 优化 | 性能：通知轮询改轻量端点 `/reports/comment-feed`（1.8MB→5.6KB）、响应 gzip（1.8MB→330KB）、Hikari 连接池 1→10 + SQLite WAL + busy_timeout（消除单连接串行瓶颈）；实测 30 并发 46ms；全量回归 31/31 | 全局 |
+| 2026-09-15 | 修复 | 草稿恢复弹窗误报：写盘加「与 base 一致不写」守卫 + 加载时内容一致静默清草稿；e2e 13 新增（[BUG-004](modules/weekly-report-v2.md)） | 周报管理 v2 |
 | 2026-09-14 | 修复 | 周报继承乱码+周末自动创建：懒创建改 JSON 感知解析、currentWork/plan 存格式化文本、nextPlan 同步效应加编辑守卫、存量乱码数据修复（`scripts/repair_inherited_garble.py`）；e2e 16 新增（[BUG-003](modules/weekly-report-v2.md#bug-003-周末自动创建下周周报且本周工作内容乱码2026-09-14已解决)）；顺带修正日报看板带教区块跨周口径 | 周报管理 v2、新人培养报告 |
 | 2026-09-13 | 新增 | 新人培养报告模块第一期：daily 角色 + daily_role/group_id/mentor 账号字段、`/api/daily/**`（4 张新表）、日报填报（解析填入/自动保存/提交）、浏览批注/回复/已读/通知、双系统登录选择页与侧边栏入口、账号管理支持 daily 账号与小组管理；e2e 13 新增，全量 24/24（[文档](modules/new-employee-daily.md)） | 新人培养报告、用户与权限管理 |
 | 2026-09-13 | 新增 | 新人日报第二期：点阵看板（`/daily/dashboard`，月视图绿/黄/灰圆点+点击跳浏览）+ 补交提醒（`/daily/missing`，登录横幅跳最早缺交日）；修复看板跳浏览竞态（[BUG-002](modules/new-employee-daily.md#bug-002-看板跳浏览显示尚未填写2026-09-13已解决)）；e2e 14 新增，全量 26/26 | 新人培养报告 |

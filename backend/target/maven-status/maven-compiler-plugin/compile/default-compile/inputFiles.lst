@@ -30,6 +30,7 @@
 /Users/shipeilin/projects/shbank/HRM/backend/src/main/java/com/hr/backend/config/LlmProperties.java
 /Users/shipeilin/projects/shbank/HRM/backend/src/main/java/com/hr/backend/HrApplication.java
 /Users/shipeilin/projects/shbank/HRM/backend/src/main/java/com/hr/backend/util/PermissionChecker.java
+/Users/shipeilin/projects/shbank/HRM/backend/src/main/java/com/hr/backend/config/DatabaseTuning.java
 /Users/shipeilin/projects/shbank/HRM/backend/src/main/java/com/hr/backend/entity/User.java
 /Users/shipeilin/projects/shbank/HRM/backend/src/main/java/com/hr/backend/dao/DeptDao.java
 /Users/shipeilin/projects/shbank/HRM/backend/src/main/java/com/hr/backend/dao/DailyDao.java

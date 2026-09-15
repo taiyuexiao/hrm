@@ -53,6 +53,15 @@ public class ReportController {
         return reports;
     }
 
+    /**
+     * 全量评论轻量列表（通知派生专用）：避免前端每 30 秒拉 1.8MB 全量周报。
+     * 必须声明在 /{weekLabel}/{dept} 之前理解无碍（单段路径不与双段冲突）。
+     */
+    @GetMapping("/comment-feed")
+    public List<Map<String, Object>> getCommentFeed() {
+        return commentService.getCommentFeed();
+    }
+
     @GetMapping("/{weekLabel}/{dept}")
     public Map<String, Object> getReport(
             @PathVariable String weekLabel,

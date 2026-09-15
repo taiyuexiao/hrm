@@ -176,6 +176,44 @@ public class CommentService {
         }
     }
 
+    /**
+     * 全量评论轻量列表（通知派生用）：仅评论字段 + 所属周/科室，
+     * 替代前端每 30 秒拉取 1.8MB 全量周报的做法（性能优化 2026-09-15）。
+     */
+    public List<Map<String, Object>> getCommentFeed() {
+        return jdbcTemplate.query("""
+                SELECT c.id, c.report_id, c.parent_id, c.author_id, c.author_name,
+                       c.content, c.mention_ids, c.created_at, w.week_label, w.dept
+                FROM comments c
+                JOIN weekly_reports w ON c.report_id = w.id
+                WHERE w.deleted_at IS NULL
+                ORDER BY c.created_at DESC
+                """,
+                (rs, n) -> {
+                    Map<String, Object> m = new LinkedHashMap<>();
+                    m.put("id", rs.getString("id"));
+                    m.put("reportId", rs.getString("report_id"));
+                    m.put("parentId", rs.getString("parent_id"));
+                    m.put("authorId", rs.getString("author_id"));
+                    m.put("authorName", rs.getString("author_name"));
+                    m.put("content", rs.getString("content"));
+                    m.put("mentionIds", parseJsonArray(rs.getString("mention_ids")));
+                    m.put("createdAt", rs.getString("created_at"));
+                    m.put("weekLabel", rs.getString("week_label"));
+                    m.put("dept", rs.getString("dept"));
+                    return m;
+                });
+    }
+
+    private List<String> parseJsonArray(String json) {
+        if (json == null || json.isBlank()) return List.of();
+        try {
+            return objectMapper.readValue(json, new com.fasterxml.jackson.core.type.TypeReference<List<String>>() {});
+        } catch (Exception e) {
+            return List.of();
+        }
+    }
+
     public List<Map<String, Object>> getCommentsByReportId(String reportId) {
         // 查询所有属于该报告的评论（含回复）
         List<Map<String, Object>> all = jdbcTemplate.query(

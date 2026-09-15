@@ -11,6 +11,7 @@ com/hr/backend/utils/JwtUtils.class
 com/hr/backend/entity/Suggestion.class
 com/hr/backend/util/DeadlineCalculator.class
 com/hr/backend/util/PermissionCheckResult.class
+com/hr/backend/config/DatabaseTuning.class
 com/hr/backend/dto/AiSummaryResponse.class
 com/hr/backend/entity/User.class
 com/hr/backend/controller/NotificationController.class
@@ -48,5 +49,6 @@ com/hr/backend/dto/AiGlobalAnalysisRequest$DeptReport.class
 com/hr/backend/service/ReportService$2.class
 com/hr/backend/dao/DeptDao.class
 com/hr/backend/controller/DeptController.class
+com/hr/backend/service/CommentService$4.class
 com/hr/backend/controller/ReportController$2.class
 com/hr/backend/service/SuggestionService.class

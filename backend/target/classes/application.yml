@@ -4,13 +4,21 @@ app:
 
 server:
   port: ${SERVER_PORT:8080}
+  compression:
+    # 全量周报等 JSON 响应 gzip：1.8MB → 约 150KB，内网首次加载与轮询明显提速
+    enabled: true
+    mime-types: application/json,application/javascript,text/css,text/html,text/plain
+    min-response-size: 2KB
 
 spring:
   datasource:
     url: jdbc:sqlite:${app.data-dir}/hr.db
     driver-class-name: org.sqlite.JDBC
     hikari:
-      maximum-pool-size: 1
+      # 高峰期 20-30 并发：单连接会把所有请求串行排队；WAL 模式下读并发安全
+      # 写操作由 SQLite 单写者串行兜底，busy_timeout 防止偶发 SQLITE_BUSY
+      maximum-pool-size: 10
+      connection-init-sql: PRAGMA busy_timeout=3000
 
 jwt:
   secret: ${JWT_SECRET:intelligent-hr-system-secret-key}
